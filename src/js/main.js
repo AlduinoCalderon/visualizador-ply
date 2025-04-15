@@ -108,7 +108,7 @@ function createParticleSystem() {
         // Posiciones aleatorias en un cubo grande
         positions[i * 3] = (Math.random() - 0.5) * 20;
         positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * 20 - 5; // Colocar mayoría detrás de la cámara
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 20; // Colocar mayoría detrás de la cámara
         
         // Variaciones de color verde
         const greenShade = Math.random() * 0.3 + 0.7; // 0.7-1.0 para mantener el verde brillante
@@ -127,7 +127,7 @@ function createParticleSystem() {
     
     // Textura para partículas
     const textureLoader = new THREE.TextureLoader();
-    const particleTexture = textureLoader.load('/particle.png', () => {}, () => {
+    const particleTexture = textureLoader.load('/public/particle.png', () => {}, () => {
         // Si falla, crear una textura de partícula por defecto
         const canvas = document.createElement('canvas');
         canvas.width = 32;
@@ -204,7 +204,8 @@ async function createModelSelector() {
         // Necesitará una API que liste los archivos
         // en JSON {name: x path: y}
         const models = [
-            { name: 'Silla', path: '/models/Silla.ply' }
+            { name: 'Silla', path: '/models/Silla.ply', },
+            { name: 'Prueba', path: '/models/test1.ply' }
         ];
         
         const controlsElement = document.createElement('div');
@@ -258,7 +259,7 @@ function animate() {
     
     // Si hay un modelo, rotarlo suavemente cuando no se interactúa
     if (currentModel && !controls.enableDamping) {
-        currentModel.rotation.y += 0.001;
+        currentModel.rotation.y += 0;
     }
     
     renderer.render(scene, camera);
@@ -267,3 +268,4 @@ function animate() {
 // Iniciar la aplicación
 createModelSelector();
 animate();
+createParticleSystem();
