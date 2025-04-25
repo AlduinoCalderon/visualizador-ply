@@ -65,7 +65,7 @@ class ModelViewer {
     });
   }
   
-  loadModel(modelPath, originalFileName = null) {
+  loadModel(modelPath) {
     console.log('Iniciando carga de modelo:', modelPath);
     const loadingElement = document.createElement('div');
     loadingElement.className = 'loading';
@@ -76,15 +76,8 @@ class ModelViewer {
       this.scene.remove(this.currentModel);
     }
     
-    // Determinar la extensión del archivo
-    let fileExtension;
-    if (originalFileName) {
-      fileExtension = originalFileName.split('.').pop().toLowerCase();
-    } else {
-      fileExtension = modelPath.split('.').pop().toLowerCase();
-    }
+    const fileExtension = modelPath.split('#').pop().split('.').pop().toLowerCase();
     console.log('Extensión del archivo a cargar:', fileExtension);
-    
     let loader;
     
     if (fileExtension === 'ply') {
@@ -107,51 +100,80 @@ class ModelViewer {
       loadingElement.textContent = 'El archivo es grande, esto puede tomar unos minutos...';
     }, 5000);
     
+    // Remover el nombre del archivo de la URL para la carga
+    const cleanUrl = modelPath.split('#')[0];
+    
     loader.load(
-      modelPath,
+      cleanUrl,
       (geometry) => {
         clearTimeout(loadingTimeout);
         let mesh;
         
         if (fileExtension === 'ply') {
           loadingElement.textContent = 'Procesando geometría...';
-          geometry.computeVertexNormals();
-          geometry.center();
-          
-          const material = new THREE.MeshStandardMaterial({ 
-            color: 0xff00ff,  
-            flatShading: false,
-            roughness: 0.5,
-            metalness: 0.2
-          });
-          
-          mesh = new THREE.Mesh(geometry, material);
+          try {
+            geometry.computeVertexNormals();
+            geometry.center();
+            
+            const material = new THREE.MeshStandardMaterial({ 
+              color: 0xff00ff,  
+              flatShading: false,
+              roughness: 0.5,
+              metalness: 0.2
+            });
+            
+            mesh = new THREE.Mesh(geometry, material);
+          } catch (error) {
+            console.error('Error procesando geometría PLY:', error);
+            loadingElement.textContent = 'Error procesando el modelo PLY. Verifica que el archivo no esté corrupto.';
+            setTimeout(() => {
+              this.container.removeChild(loadingElement);
+            }, 5000);
+            return;
+          }
         } else if (fileExtension === 'obj') {
           loadingElement.textContent = 'Procesando modelo OBJ...';
-          mesh = geometry;
-          mesh.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              child.material = new THREE.MeshStandardMaterial({
-                color: 0xff00ff,
-                flatShading: false,
-                roughness: 0.5,
-                metalness: 0.2
-              });
-            }
-          });
+          try {
+            mesh = geometry;
+            mesh.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0xff00ff,
+                  flatShading: false,
+                  roughness: 0.5,
+                  metalness: 0.2
+                });
+              }
+            });
+          } catch (error) {
+            console.error('Error procesando modelo OBJ:', error);
+            loadingElement.textContent = 'Error procesando el modelo OBJ. Verifica que el archivo no esté corrupto.';
+            setTimeout(() => {
+              this.container.removeChild(loadingElement);
+            }, 5000);
+            return;
+          }
         }
         
         loadingElement.textContent = 'Ajustando escala...';
-        const box = new THREE.Box3().setFromObject(mesh);
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 1 / maxDim;
-        
-        mesh.scale.set(scale, scale, scale);
-        this.scene.add(mesh);
-        this.currentModel = mesh;
-        
-        this.container.removeChild(loadingElement);
+        try {
+          const box = new THREE.Box3().setFromObject(mesh);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 1 / maxDim;
+          
+          mesh.scale.set(scale, scale, scale);
+          this.scene.add(mesh);
+          this.currentModel = mesh;
+          
+          this.container.removeChild(loadingElement);
+        } catch (error) {
+          console.error('Error ajustando escala:', error);
+          loadingElement.textContent = 'Error ajustando la escala del modelo.';
+          setTimeout(() => {
+            this.container.removeChild(loadingElement);
+          }, 5000);
+        }
       },
       (xhr) => {
         const percentComplete = (xhr.loaded / xhr.total) * 100;
@@ -160,7 +182,7 @@ class ModelViewer {
       (error) => {
         clearTimeout(loadingTimeout);
         console.error('Error cargando modelo:', error);
-        loadingElement.textContent = 'Error al cargar el modelo. Intenta con un archivo más pequeño o verifica el formato.';
+        loadingElement.textContent = 'Error al cargar el modelo. Verifica que el archivo no esté corrupto y que sea un PLY u OBJ válido.';
         setTimeout(() => {
           this.container.removeChild(loadingElement);
         }, 5000);
@@ -205,18 +227,19 @@ class ModelViewer {
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
-        console.log('Archivo seleccionado:', file.name, 'Tamaño:', file.size, 'bytes');
+        console.log('Archivo seleccionado:', file.name, 'Tamaño:', (file.size / (1024 * 1024)).toFixed(2), 'MB');
         const fileExtension = file.name.split('.').pop().toLowerCase();
         console.log('Extensión detectada:', fileExtension);
         
         if (fileExtension === 'ply' || fileExtension === 'obj') {
-          if (file.size > 100 * 1024 * 1024) { // 100MB
+          if (file.size > 500 * 1024 * 1024) { // 500MB
             alert('El archivo es muy grande. Esto puede causar problemas de rendimiento.');
           }
           console.log('Creando URL para el archivo...');
           const objectURL = URL.createObjectURL(file);
-          console.log('URL creada:', objectURL);
-          this.loadModel(objectURL, file.name);
+          const modelPath = `${objectURL}#${file.name}`;
+          console.log('URL creada:', modelPath);
+          this.loadModel(modelPath);
         } else {
           console.error('Extensión no soportada:', fileExtension);
           alert('Por favor, selecciona un archivo PLY u OBJ válido');
@@ -258,15 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Iniciar con modelos estáticos (para pruebas)
   const staticModels = [
-    //{ name: 'Silla', path: '/models/Silla.ply' },
-    { name: 'Test1', path: '/models/test1.ply' },
-    { name: 'Test2', path: '/models/test2.ply' },
-    { name: 'Kinect1', path: '/models/kinect_reconstruction_20250424_172803.ply' },
-    { name: 'Kinect2', path: '/models/kinect_reconstruction_20250424_172823.ply' },
-    { name: 'Kinect3', path: '/models/kinect_reconstruction_20250424_172851.ply' },
-    { name: 'Kinect1_OBJ', path: '/models/kinect_reconstruction_20250424_172803.obj' },
-    { name: 'Kinect2_OBJ', path: '/models/kinect_reconstruction_20250424_172823.obj' },
-    { name: 'Kinect3_OBJ', path: '/models/kinect_reconstruction_20250424_172851.obj' }
+    { name: 'Kinect1_OBJ', path: './models/kinect_reconstruction_20250424_172803.obj' },
+    { name: 'Kinect2_OBJ', path: './models/kinect_reconstruction_20250424_172823.obj' },
+    { name: 'Kinect3_OBJ', path: './models/kinect_reconstruction_20250424_172851.obj' }
   ];
   
   viewer.createModelSelector(staticModels);
@@ -304,4 +321,4 @@ export async function loadModelsFromAPI(apiUrl) {
     console.error('Error cargando modelos desde API:', error);
     return [];
   }
-}
+} 

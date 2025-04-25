@@ -1,5 +1,10 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/visualizador-ply/',
+  base: '/digital-twin-viewer/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true
+  }
 }) 
