@@ -200,11 +200,19 @@ class ModelViewer {
     const select = document.createElement('select');
     select.id = 'model-selector';
     
-    models.forEach(model => {
+    // Función para agregar un modelo al selector
+    const addModelToSelector = (name, path) => {
       const option = document.createElement('option');
-      option.value = model.path;
-      option.textContent = model.name;
+      option.value = path;
+      option.textContent = name;
       select.appendChild(option);
+      // Solo seleccionar el nuevo modelo, sin cargarlo
+      select.value = path;
+    };
+    
+    // Agregar modelos iniciales
+    models.forEach(model => {
+      addModelToSelector(model.name, model.path);
     });
     
     select.addEventListener('change', (e) => {
@@ -239,6 +247,9 @@ class ModelViewer {
           const objectURL = URL.createObjectURL(file);
           const modelPath = `${objectURL}#${file.name}`;
           console.log('URL creada:', modelPath);
+          
+          // Agregar el nuevo modelo al selector y cargarlo
+          addModelToSelector(file.name, modelPath);
           this.loadModel(modelPath);
         } else {
           console.error('Extensión no soportada:', fileExtension);
