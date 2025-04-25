@@ -281,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Iniciar con modelos estáticos (para pruebas)
   const staticModels = [
+    { name: 'Silla', path: './models/Silla.ply' },
     { name: 'Kinect1_OBJ', path: './models/kinect_reconstruction_20250424_172803.obj' },
     { name: 'Kinect2_OBJ', path: './models/kinect_reconstruction_20250424_172823.obj' },
     { name: 'Kinect3_OBJ', path: './models/kinect_reconstruction_20250424_172851.obj' }
