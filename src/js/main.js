@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 class ModelViewer {
@@ -64,7 +65,8 @@ class ModelViewer {
     });
   }
   
-  loadModel(modelPath) {
+  loadModel(modelPath, originalFileName = null) {
+    console.log('Iniciando carga de modelo:', modelPath);
     const loadingElement = document.createElement('div');
     loadingElement.className = 'loading';
     loadingElement.textContent = 'Cargando modelo...';
@@ -74,22 +76,72 @@ class ModelViewer {
       this.scene.remove(this.currentModel);
     }
     
-    const loader = new PLYLoader();
+    // Determinar la extensión del archivo
+    let fileExtension;
+    if (originalFileName) {
+      fileExtension = originalFileName.split('.').pop().toLowerCase();
+    } else {
+      fileExtension = modelPath.split('.').pop().toLowerCase();
+    }
+    console.log('Extensión del archivo a cargar:', fileExtension);
+    
+    let loader;
+    
+    if (fileExtension === 'ply') {
+      console.log('Usando PLYLoader');
+      loader = new PLYLoader();
+    } else if (fileExtension === 'obj') {
+      console.log('Usando OBJLoader');
+      loader = new OBJLoader();
+    } else {
+      console.error('Formato de archivo no soportado:', fileExtension);
+      loadingElement.textContent = 'Formato de archivo no soportado';
+      setTimeout(() => {
+        this.container.removeChild(loadingElement);
+      }, 2000);
+      return;
+    }
+    
+    // Configurar timeout para archivos grandes
+    const loadingTimeout = setTimeout(() => {
+      loadingElement.textContent = 'El archivo es grande, esto puede tomar unos minutos...';
+    }, 5000);
+    
     loader.load(
       modelPath,
       (geometry) => {
-        geometry.computeVertexNormals();
-        geometry.center();
+        clearTimeout(loadingTimeout);
+        let mesh;
         
-        const material = new THREE.MeshStandardMaterial({ 
-          color: 0xff00ff,  
-          flatShading: false,
-          roughness: 0.5,
-          metalness: 0.2
-        });
+        if (fileExtension === 'ply') {
+          loadingElement.textContent = 'Procesando geometría...';
+          geometry.computeVertexNormals();
+          geometry.center();
+          
+          const material = new THREE.MeshStandardMaterial({ 
+            color: 0xff00ff,  
+            flatShading: false,
+            roughness: 0.5,
+            metalness: 0.2
+          });
+          
+          mesh = new THREE.Mesh(geometry, material);
+        } else if (fileExtension === 'obj') {
+          loadingElement.textContent = 'Procesando modelo OBJ...';
+          mesh = geometry;
+          mesh.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.material = new THREE.MeshStandardMaterial({
+                color: 0xff00ff,
+                flatShading: false,
+                roughness: 0.5,
+                metalness: 0.2
+              });
+            }
+          });
+        }
         
-        const mesh = new THREE.Mesh(geometry, material);
-        
+        loadingElement.textContent = 'Ajustando escala...';
         const box = new THREE.Box3().setFromObject(mesh);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
@@ -106,11 +158,12 @@ class ModelViewer {
         loadingElement.textContent = `Cargando: ${Math.round(percentComplete)}%`;
       },
       (error) => {
+        clearTimeout(loadingTimeout);
         console.error('Error cargando modelo:', error);
-        loadingElement.textContent = 'Error al cargar el modelo';
+        loadingElement.textContent = 'Error al cargar el modelo. Intenta con un archivo más pequeño o verifica el formato.';
         setTimeout(() => {
           this.container.removeChild(loadingElement);
-        }, 2000);
+        }, 5000);
       }
     );
   }
@@ -120,7 +173,7 @@ class ModelViewer {
     controlsElement.className = 'controls';
     
     const label = document.createElement('label');
-    label.textContent = 'Seleccionar modelo:';
+    label.textContent = 'Modelo 3D:';
     
     const select = document.createElement('select');
     select.id = 'model-selector';
@@ -136,8 +189,45 @@ class ModelViewer {
       this.loadModel(e.target.value);
     });
     
+    // Crear botón para cargar archivos locales
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.ply,.obj';
+    fileInput.style.display = 'none';
+    
+    const uploadButton = document.createElement('button');
+    uploadButton.textContent = 'Cargar archivo local';
+    uploadButton.className = 'upload-button';
+    uploadButton.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        console.log('Archivo seleccionado:', file.name, 'Tamaño:', file.size, 'bytes');
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        console.log('Extensión detectada:', fileExtension);
+        
+        if (fileExtension === 'ply' || fileExtension === 'obj') {
+          if (file.size > 100 * 1024 * 1024) { // 100MB
+            alert('El archivo es muy grande. Esto puede causar problemas de rendimiento.');
+          }
+          console.log('Creando URL para el archivo...');
+          const objectURL = URL.createObjectURL(file);
+          console.log('URL creada:', objectURL);
+          this.loadModel(objectURL, file.name);
+        } else {
+          console.error('Extensión no soportada:', fileExtension);
+          alert('Por favor, selecciona un archivo PLY u OBJ válido');
+        }
+      }
+    });
+    
     controlsElement.appendChild(label);
     controlsElement.appendChild(select);
+    controlsElement.appendChild(uploadButton);
+    controlsElement.appendChild(fileInput);
     
     document.querySelector('main').appendChild(controlsElement);
     
@@ -155,27 +245,33 @@ class ModelViewer {
     
     // Si hay un modelo, rotarlo suavemente cuando no se interactúa
     if (this.currentModel && !this.controls.enableDamping) {
-      this.currentModel.rotation.y += 0.001;
+      this.currentModel.rotation.y += 0.21;
     }
     
     this.renderer.render(this.scene, this.camera);
   }
 }
 
-// Inicialización
+
 document.addEventListener('DOMContentLoaded', () => {
   const viewer = new ModelViewer('viewer-container');
   
   // Iniciar con modelos estáticos (para pruebas)
   const staticModels = [
-    { name: 'Silla', path: '/models/Silla.ply' },
-    { name: 'Prueba', path: '/models/test1.ply' }
+    //{ name: 'Silla', path: '/models/Silla.ply' },
+    { name: 'Test1', path: '/models/test1.ply' },
+    { name: 'Test2', path: '/models/test2.ply' },
+    { name: 'Kinect1', path: '/models/kinect_reconstruction_20250424_172803.ply' },
+    { name: 'Kinect2', path: '/models/kinect_reconstruction_20250424_172823.ply' },
+    { name: 'Kinect3', path: '/models/kinect_reconstruction_20250424_172851.ply' },
+    { name: 'Kinect1_OBJ', path: '/models/kinect_reconstruction_20250424_172803.obj' },
+    { name: 'Kinect2_OBJ', path: '/models/kinect_reconstruction_20250424_172823.obj' },
+    { name: 'Kinect3_OBJ', path: '/models/kinect_reconstruction_20250424_172851.obj' }
   ];
   
   viewer.createModelSelector(staticModels);
   viewer.animate();
-  
-  // Exportar la instancia para uso externo si es necesario
+
   window.modelViewer = viewer;
 });
 
