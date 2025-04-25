@@ -2,6 +2,7 @@
   "name": "digital-twin-viewer",
   "private": true,
   "version": "0.1.0",
+  "author": "Alduino Calderon",
   "type": "module",
   "scripts": {
     "dev": "vite",
