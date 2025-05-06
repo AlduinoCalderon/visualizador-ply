@@ -246,12 +246,12 @@ class ModelViewer {
       }, 2000);
       return;
     }
-
+    
     // Configurar timeout para archivos grandes
     const loadingTimeout = setTimeout(() => {
       loadingElement.textContent = 'El archivo es grande, esto puede tomar unos minutos...';
     }, 5000);
-
+    
     loader.load(
       modelPath.split('#')[0],
       (geometry) => {
@@ -264,7 +264,7 @@ class ModelViewer {
             geometry.computeVertexNormals();
             geometry.center();
             
-            const material = new THREE.MeshStandardMaterial({
+            const material = new THREE.MeshStandardMaterial({ 
               color: 0x808080,
               flatShading: false,
               roughness: 0.7,
@@ -303,7 +303,7 @@ class ModelViewer {
             return;
           }
         }
-
+        
         // Aplicar escala según el modelo
         if (fileName.toLowerCase().includes('silla') || fileName.toLowerCase().includes('shelf')) {
           // Escala fija para la silla y el estante
@@ -335,9 +335,9 @@ class ModelViewer {
           mesh.position.y = -bbox.min.y * mesh.scale.y;
         }
 
-        this.scene.add(mesh);
-        this.currentModel = mesh;
-        
+          this.scene.add(mesh);
+          this.currentModel = mesh;
+          
         // Centrar la cámara en el objeto
         const modelBBox = new THREE.Box3().setFromObject(mesh);
         const modelSize = new THREE.Vector3();
@@ -352,8 +352,43 @@ class ModelViewer {
           this.camera.position.set(5.10, 4.85, 9.99);
           this.controls.target.set(1.28, 3.82, 0.12);
           this.addDraggableShoe(4.608);
-          // WebSocket: Actualización en tiempo real
           let temp = null, hum = null;
+          let lastUpdateTimer = null;
+          const FALLBACK_TIMEOUT = 60000; // 1 minuto
+          const SUBSEQUENT_FALLBACK_TIMEOUT = 300000; // 5 minutos
+          let isFirstFallback = true;
+
+          const resetTimer = () => {
+            if (lastUpdateTimer) clearTimeout(lastUpdateTimer);
+            lastUpdateTimer = setTimeout(async () => {
+              try {
+                const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
+                  mode: 'cors',
+                  headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                const data = await response.json();
+                const proximity1Value = data.proximity1?.value || 100;
+                const proximity2Value = data.proximity2?.value || 100;
+                if (this.shoeRojo) this.shoeRojo.visible = proximity1Value < 50;
+                if (this.shoeAzul) this.shoeAzul.visible = proximity2Value < 50;
+                this.showShelfOccupancyBox(
+                  this.shoeRojo && this.shoeRojo.visible,
+                  this.shoeAzul && this.shoeAzul.visible,
+                  temp,
+                  hum
+                );
+              } catch (error) {
+                console.error('Error en fallback fetch:', error);
+              }
+              // Después de la primera activación, cambiar el timeout a 5 minutos
+              if (isFirstFallback) {
+                isFirstFallback = false;
+                lastUpdateTimer = setTimeout(resetTimer, SUBSEQUENT_FALLBACK_TIMEOUT);
+              }
+            }, FALLBACK_TIMEOUT);
+          };
+
           setupWebSocket();
           subscribeSensor('warehouse/unit/1/sensor/proximity1', (message) => {
             if (!this.isShelfModel) return;
@@ -364,6 +399,7 @@ class ModelViewer {
               temp,
               hum
             );
+            resetTimer();
           });
           subscribeSensor('warehouse/unit/1/sensor/proximity2', (message) => {
             if (!this.isShelfModel) return;
@@ -374,6 +410,7 @@ class ModelViewer {
               temp,
               hum
             );
+            resetTimer();
           });
           subscribeSensor('warehouse/unit/1/sensor/temperature', (message) => {
             if (!this.isShelfModel) return;
@@ -384,6 +421,7 @@ class ModelViewer {
               temp,
               hum
             );
+            resetTimer();
           });
           subscribeSensor('warehouse/unit/1/sensor/humidity', (message) => {
             if (!this.isShelfModel) return;
@@ -394,7 +432,9 @@ class ModelViewer {
               temp,
               hum
             );
+            resetTimer();
           });
+          resetTimer();
         } else if (fileName.toLowerCase().includes('silla')) {
           this.camera.position.set(0.16, 2.45, 4.31);
           this.controls.target.set(0.16, 0.53, 0.80);
