@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { setupWebSocket, subscribeSensor, unsubscribeSensor } from './mqtt-setup.js';
 
 class ModelViewer {
   constructor(containerId = 'viewer-container') {
@@ -11,6 +12,7 @@ class ModelViewer {
     // Crear el elemento para mostrar coordenadas
     this.coordsDisplay = document.createElement('div');
     this.coordsDisplay.className = 'coords-display';
+    this.coordsDisplay.style.display = 'none'; // Oculto por defecto
     document.body.appendChild(this.coordsDisplay);
     
     this.initScene();
@@ -343,33 +345,74 @@ class ModelViewer {
         const modelCenter = new THREE.Vector3();
         modelBBox.getCenter(modelCenter);
 
-        // Valores fijos para shelf y silla
-        if (fileName.toLowerCase().includes('shelf')) {
+        // Determinar si el modelo es shelf
+        this.isShelfModel = fileName.toLowerCase().includes('shelf');
+
+        if (this.isShelfModel) {
           this.camera.position.set(5.10, 4.85, 9.99);
           this.controls.target.set(1.28, 3.82, 0.12);
           this.addDraggableShoe(4.608);
+          // WebSocket: Actualización en tiempo real
+          let temp = null, hum = null;
+          setupWebSocket();
+          subscribeSensor('warehouse/unit/1/sensor/proximity1', (message) => {
+            if (!this.isShelfModel) return;
+            if (this.shoeRojo) this.shoeRojo.visible = message.value < 50;
+            this.showShelfOccupancyBox(
+              this.shoeRojo && this.shoeRojo.visible,
+              this.shoeAzul && this.shoeAzul.visible,
+              temp,
+              hum
+            );
+          });
+          subscribeSensor('warehouse/unit/1/sensor/proximity2', (message) => {
+            if (!this.isShelfModel) return;
+            if (this.shoeAzul) this.shoeAzul.visible = message.value < 50;
+            this.showShelfOccupancyBox(
+              this.shoeRojo && this.shoeRojo.visible,
+              this.shoeAzul && this.shoeAzul.visible,
+              temp,
+              hum
+            );
+          });
+          subscribeSensor('warehouse/unit/1/sensor/temperature', (message) => {
+            if (!this.isShelfModel) return;
+            temp = message.value;
+            this.showShelfOccupancyBox(
+              this.shoeRojo && this.shoeRojo.visible,
+              this.shoeAzul && this.shoeAzul.visible,
+              temp,
+              hum
+            );
+          });
+          subscribeSensor('warehouse/unit/1/sensor/humidity', (message) => {
+            if (!this.isShelfModel) return;
+            hum = message.value;
+            this.showShelfOccupancyBox(
+              this.shoeRojo && this.shoeRojo.visible,
+              this.shoeAzul && this.shoeAzul.visible,
+              temp,
+              hum
+            );
+          });
         } else if (fileName.toLowerCase().includes('silla')) {
           this.camera.position.set(0.16, 2.45, 4.31);
           this.controls.target.set(0.16, 0.53, 0.80);
+          // Ocultar métricas y recuadro de sensores en silla
+          if (this.occupancyBox) this.occupancyBox.style.display = 'none';
+          if (this.coordsDisplay) this.coordsDisplay.style.display = 'none';
+          if (this.shoeRojo) this.shoeRojo.visible = false;
+          if (this.shoeAzul) this.shoeAzul.visible = false;
         } else {
-          // Calcular la distancia óptima para que el objeto ocupe el 95% del viewport
-          const fov = this.camera.fov * (Math.PI / 180);
-          const maxDim = Math.max(modelSize.x, modelSize.y, modelSize.z);
-          const aspectRatio = this.container.clientWidth / this.container.clientHeight;
-          const viewportHeight = 2 * Math.tan(fov / 2);
-          const requiredDistance = (maxDim / (viewportHeight * 0.95));
-          const angle = 15 * (Math.PI / 180); // 15 grados en radianes
-          const y = 2 + requiredDistance * Math.sin(angle);
-          const z = requiredDistance * Math.cos(angle);
-          this.camera.position.set(0, y, z);
-          this.controls.target.set(0, 2, 0);
+          // Ocultar métricas y recuadro de sensores en otros modelos
+          if (this.occupancyBox) this.occupancyBox.style.display = 'none';
+          if (this.coordsDisplay) this.coordsDisplay.style.display = 'none';
+          if (this.shoeRojo) this.shoeRojo.visible = false;
+          if (this.shoeAzul) this.shoeAzul.visible = false;
         }
 
         this.camera.updateProjectionMatrix();
         this.controls.update();
-        
-        // Iniciar el polling de estado de los estantes
-        this.startShelfStatusPolling();
         
         this.container.removeChild(loadingElement);
       },
@@ -410,6 +453,20 @@ class ModelViewer {
     const menuTitle = document.createElement('h3');
     menuTitle.textContent = 'Selección de Modelo';
     menuContent.appendChild(menuTitle);
+
+    // Botón para mostrar/ocultar métricas
+    const metricsButton = document.createElement('button');
+    metricsButton.textContent = 'Ver métricas';
+    metricsButton.className = 'metrics-toggle-button';
+    metricsButton.style.marginBottom = '1rem';
+    metricsButton.onclick = () => {
+      if (this.coordsDisplay.style.display === 'none') {
+        this.coordsDisplay.style.display = 'flex';
+      } else {
+        this.coordsDisplay.style.display = 'none';
+      }
+    };
+    menuContent.appendChild(metricsButton);
 
     // Selector de modelos
     const modelContainer = document.createElement('div');
@@ -846,7 +903,7 @@ class ModelViewer {
     this.coordsDisplay.innerHTML = statsHTML;
 
     // Mostrar datos del zapato rojo si existe
-    if (this.shoeRojo) {
+    if (this.shoeRojo && this.shoeRojo.visible) {
       const shoe = this.shoeRojo;
       const shoeBBox = new THREE.Box3().setFromObject(shoe);
       const shoeSize = new THREE.Vector3();
@@ -874,7 +931,7 @@ class ModelViewer {
     }
 
     // Mostrar datos del zapato azul si existe
-    if (this.shoeAzul) {
+    if (this.shoeAzul && this.shoeAzul.visible) {
       const shoe = this.shoeAzul;
       const shoeBBox = new THREE.Box3().setFromObject(shoe);
       const shoeSize = new THREE.Vector3();
@@ -1033,6 +1090,7 @@ class ModelViewer {
       shoe.name = 'shoe_rojo';
       shoe.scale.set(0.0237, 0.0237, 0.0237);
       shoe.position.set(0, yPosition, 0);
+      shoe.visible = false; // Invisible por defecto
       this.scene.add(shoe);
       this.shoeRojo = shoe;
       // Drag removido
@@ -1052,10 +1110,100 @@ class ModelViewer {
       const shoe = new THREE.Mesh(geometry, material);
       shoe.name = 'shoe_azul';
       shoe.scale.set(0.0237, 0.0237, 0.0237);
-      shoe.position.set(0, yPosition-.123, 0);
+      shoe.position.set(0, yPosition-0.123, 0);
+      shoe.visible = false; // Invisible por defecto
       this.scene.add(shoe);
       this.shoeAzul = shoe;
     });
+  }
+
+  showShelfOccupancyBox(occupancy1, occupancy2, temp = null, hum = null) {
+    if (!this.isShelfModel) {
+      if (this.occupancyBox) this.occupancyBox.style.display = 'none';
+      return;
+    }
+    if (!this.occupancyBox) {
+      this.occupancyBox = document.createElement('div');
+      this.occupancyBox.className = 'occupancy-box';
+      this.occupancyBox.style.position = 'fixed';
+      this.occupancyBox.style.top = '1rem';
+      this.occupancyBox.style.right = '1rem';
+      this.occupancyBox.style.left = '';
+      this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
+      this.occupancyBox.style.color = '#fff';
+      this.occupancyBox.style.padding = '1.2rem 1.5rem';
+      this.occupancyBox.style.borderRadius = '12px';
+      this.occupancyBox.style.fontFamily = 'monospace';
+      this.occupancyBox.style.fontSize = '1rem';
+      this.occupancyBox.style.zIndex = 2000;
+      this.occupancyBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
+      this.occupancyBox.style.maxWidth = '90vw';
+      this.occupancyBox.style.wordBreak = 'break-word';
+      this.occupancyBox.style.display = 'flex';
+      this.occupancyBox.style.flexDirection = 'column';
+      this.occupancyBox.style.alignItems = 'flex-start';
+      this.occupancyBox.style.gap = '0.5rem';
+      document.body.appendChild(this.occupancyBox);
+
+      // Media query para móvil: centrado fijo abajo
+      const style = document.createElement('style');
+      style.textContent = `
+        @media (max-width: 600px) {
+          .occupancy-box {
+            left: 50% !important;
+            right: auto !important;
+            top: auto !important;
+            bottom: 0.5rem !important;
+            transform: translateX(-50%) !important;
+            max-width: 98vw !important;
+            font-size: 0.95rem !important;
+            padding: 0.8rem 0.5rem !important;
+            border-radius: 10px !important;
+            position: fixed !important;
+            z-index: 2000 !important;
+          }
+        }
+        .occupancy-box .sensor-row {
+          display: flex;
+          flex-direction: row;
+          gap: 1.2rem;
+          flex-wrap: wrap;
+          margin-top: 0.5rem;
+        }
+        .occupancy-box .sensor-item {
+          min-width: 90px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    // Calcular ocupación
+    const totalEstantes = 10;
+    const volumenPorEstante = 0.025; // m³
+    let ocupados = 0;
+    if (occupancy1) ocupados++;
+    if (occupancy2) ocupados++;
+    const metrosUsados = ocupados * volumenPorEstante;
+    const porcentaje = ((metrosUsados / (totalEstantes * volumenPorEstante)) * 100).toFixed(1);
+    let html = '';
+    if (ocupados > 0) {
+      html += `<div><b>Estantes ocupados:</b> ${ocupados}</div>`;
+      html += `<div><b>Metros usados:</b> ${metrosUsados.toFixed(3)} m³</div>`;
+      html += `<div><b>Porcentaje de ocupación:</b> ${porcentaje}%</div>`;
+    }
+    if (temp !== null || hum !== null) {
+      html += `<div class='sensor-row'>
+        <div class='sensor-item'><b>Temp:</b> ${temp !== null ? temp : '--'} °C</div>
+        <div class='sensor-item'><b>Humedad:</b> ${hum !== null ? hum : '--'} %</div>
+      </div>`;
+    }
+    this.occupancyBox.innerHTML = html;
+    this.occupancyBox.style.display = (html) ? 'block' : 'none';
+  }
+
+  hideShelfOccupancyBox() {
+    if (this.occupancyBox) {
+      this.occupancyBox.style.display = 'none';
+    }
   }
 
   // Mejorar el método dispose para limpiar todos los recursos
