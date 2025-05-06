@@ -8,6 +8,11 @@ class ModelViewer {
     this.container = document.getElementById(containerId) || document.body;
     this.currentModel = null;
     
+    // Crear el elemento para mostrar coordenadas
+    this.coordsDisplay = document.createElement('div');
+    this.coordsDisplay.className = 'coords-display';
+    document.body.appendChild(this.coordsDisplay);
+    
     this.initScene();
     this.initLights();
     this.initControls();
@@ -173,20 +178,32 @@ class ModelViewer {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.rotateSpeed = 0.5;
-    this.controls.target.set(0, 1, 0);
-    
-    // Limitar el movimiento de la cámara
     this.controls.minDistance = 4;
-    this.controls.maxDistance = 12;
-    this.controls.maxPolarAngle = Math.PI / 2; // No permitir ver debajo del grid
-    this.controls.minPolarAngle = Math.PI / 6; // Limitar vista superior
+    this.controls.maxDistance = 20;  // Aumentado para permitir más zoom out
     
-    // Limitar rotación horizontal
-    this.controls.minAzimuthAngle = -Math.PI / 4; // -45 grados
-    this.controls.maxAzimuthAngle = Math.PI / 4;  // +45 grados
+    // Habilitar movimiento con click derecho
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
 
-    // Limitar el paneo
-    this.controls.enablePan = false;
+    // Quitar restricciones de rotación
+    this.controls.minPolarAngle = 0;
+    this.controls.maxPolarAngle = Math.PI;
+    this.controls.minAzimuthAngle = -Infinity;
+    this.controls.maxAzimuthAngle = Infinity;
+
+    // Mantener pan habilitado
+    this.controls.enablePan = true;
+    this.controls.panSpeed = 0.5;
+
+    // Añadir event listeners para actualizar coordenadas
+    this.controls.addEventListener('change', () => {
+      if (this.currentModel) {
+        this.updateCoordinatesDisplay();
+      }
+    });
   }
   
   setupEventListeners() {
@@ -210,14 +227,14 @@ class ModelViewer {
     }
     
     const fileExtension = modelPath.split('#').pop().split('.').pop().toLowerCase();
-    console.log('Extensión del archivo a cargar:', fileExtension);
+    const fileName = modelPath.split('/').pop().split('#')[0];
+    console.log('Cargando:', fileName, 'Extensión:', fileExtension);
+    
     let loader;
     
     if (fileExtension === 'ply') {
-      console.log('Usando PLYLoader');
       loader = new PLYLoader();
     } else if (fileExtension === 'obj') {
-      console.log('Usando OBJLoader');
       loader = new OBJLoader();
     } else {
       console.error('Formato de archivo no soportado:', fileExtension);
@@ -227,17 +244,14 @@ class ModelViewer {
       }, 2000);
       return;
     }
-    
+
     // Configurar timeout para archivos grandes
     const loadingTimeout = setTimeout(() => {
       loadingElement.textContent = 'El archivo es grande, esto puede tomar unos minutos...';
     }, 5000);
-    
-    // Remover el nombre del archivo de la URL para la carga
-    const cleanUrl = modelPath.split('#')[0];
-    
+
     loader.load(
-      cleanUrl,
+      modelPath.split('#')[0],
       (geometry) => {
         clearTimeout(loadingTimeout);
         let mesh;
@@ -248,8 +262,8 @@ class ModelViewer {
             geometry.computeVertexNormals();
             geometry.center();
             
-            const material = new THREE.MeshStandardMaterial({ 
-              color: 0x808080,  // Gris industrial
+            const material = new THREE.MeshStandardMaterial({
+              color: 0x808080,
               flatShading: false,
               roughness: 0.7,
               metalness: 0.3
@@ -258,7 +272,7 @@ class ModelViewer {
             mesh = new THREE.Mesh(geometry, material);
           } catch (error) {
             console.error('Error procesando geometría PLY:', error);
-            loadingElement.textContent = 'Error procesando el modelo PLY. Verifica que el archivo no esté corrupto.';
+            loadingElement.textContent = 'Error procesando el modelo PLY.';
             setTimeout(() => {
               this.container.removeChild(loadingElement);
             }, 5000);
@@ -278,32 +292,6 @@ class ModelViewer {
                 });
               }
             });
-
-            // Calcular el tamaño del contenedor en unidades 3D
-            const containerHeight = Math.tan(this.camera.fov * Math.PI / 360) * 2 * this.camera.position.length();
-            const targetHeight = containerHeight * 0.75;
-
-            // Calcular bounding box inicial
-            const bbox = new THREE.Box3().setFromObject(mesh);
-            const modelHeight = bbox.max.y - bbox.min.y;
-            const scale = targetHeight / modelHeight;
-
-            // Aplicar escala
-            mesh.scale.set(scale, scale, scale);
-
-            // Recalcular bounding box después de escalar
-            bbox.setFromObject(mesh);
-            const centerOffset = new THREE.Vector3();
-            bbox.getCenter(centerOffset);
-
-            // Posicionar el modelo correctamente
-            mesh.position.x = -centerOffset.x;
-            mesh.position.z = -centerOffset.z;
-            mesh.position.y = -bbox.min.y * scale + 6; // Elevado 6 unidades
-
-            // Rotar el modelo para que esté de frente
-            mesh.rotation.y = Math.PI; // Girar 180 grados
-
           } catch (error) {
             console.error('Error procesando modelo OBJ:', error);
             loadingElement.textContent = 'Error procesando el modelo OBJ.';
@@ -313,27 +301,83 @@ class ModelViewer {
             return;
           }
         }
+
+        // Aplicar escala según el modelo
+        if (fileName.toLowerCase().includes('silla') || fileName.toLowerCase().includes('shelf')) {
+          // Escala fija para la silla y el estante
+          mesh.scale.set(0.005, 0.005, 0.005);
+          console.log('Aplicando escala fija para silla/estante:', mesh.scale);
+
+          // Desplazar el estante hacia arriba si es un shelf
+          if (fileName.toLowerCase().includes('shelf')) {
+            mesh.position.y += 10;
+          }
+        } else {
+          // Para otros modelos, mantener la escala proporcional
+          const bbox = new THREE.Box3().setFromObject(mesh);
+          const size = bbox.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 1 / maxDim;
+          mesh.scale.set(scale, scale, scale);
+          console.log('Aplicando escala proporcional:', mesh.scale);
+        }
+
+        // Centrar el modelo y ajustar posición Y
+        const bbox = new THREE.Box3().setFromObject(mesh);
+        const center = bbox.getCenter(new THREE.Vector3());
+        mesh.position.x = -center.x;
+        mesh.position.z = -center.z;
+        if (!fileName.toLowerCase().includes('shelf')) {
+          mesh.position.y = -bbox.min.y * mesh.scale.y;
+        }
+
+        this.scene.add(mesh);
+        this.currentModel = mesh;
         
-          this.scene.add(mesh);
-          this.currentModel = mesh;
-          
-        // Ajustar los controles para centrarse en el modelo
-        this.controls.target.set(0, 3, 0); // Punto medio del modelo elevado
+        // Centrar la cámara en el objeto
+        const modelBBox = new THREE.Box3().setFromObject(mesh);
+        const modelSize = new THREE.Vector3();
+        modelBBox.getSize(modelSize);
+        const modelCenter = new THREE.Vector3();
+        modelBBox.getCenter(modelCenter);
+
+        // Valores fijos para shelf y silla
+        if (fileName.toLowerCase().includes('shelf')) {
+          this.camera.position.set(0.12, 8.07, 9.48);
+          this.controls.target.set(-0.02, 6.00, 1.07);
+        } else if (fileName.toLowerCase().includes('silla')) {
+          this.camera.position.set(0.16, 2.45, 4.31);
+          this.controls.target.set(0.16, 0.53, 0.80);
+        } else {
+          // Calcular la distancia óptima para que el objeto ocupe el 95% del viewport
+          const fov = this.camera.fov * (Math.PI / 180);
+          const maxDim = Math.max(modelSize.x, modelSize.y, modelSize.z);
+          const aspectRatio = this.container.clientWidth / this.container.clientHeight;
+          const viewportHeight = 2 * Math.tan(fov / 2);
+          const requiredDistance = (maxDim / (viewportHeight * 0.95));
+          const angle = 15 * (Math.PI / 180); // 15 grados en radianes
+          const y = 2 + requiredDistance * Math.sin(angle);
+          const z = requiredDistance * Math.cos(angle);
+          this.camera.position.set(0, y, z);
+          this.controls.target.set(0, 2, 0);
+        }
+
+        this.camera.updateProjectionMatrix();
         this.controls.update();
         
         // Iniciar el polling de estado de los estantes
         this.startShelfStatusPolling();
         
-            this.container.removeChild(loadingElement);
+        this.container.removeChild(loadingElement);
       },
       (xhr) => {
         const percentComplete = (xhr.loaded / xhr.total) * 100;
         loadingElement.textContent = `Cargando: ${Math.round(percentComplete)}%`;
       },
       (error) => {
-        clearTimeout(loadingTimeout);
+        clearTimeout(loadingTimeout); // Limpiar el timeout en caso de error
         console.error('Error cargando modelo:', error);
-        loadingElement.textContent = 'Error al cargar el modelo. Verifica que el archivo no esté corrupto y que sea un PLY u OBJ válido.';
+        loadingElement.textContent = 'Error al cargar el modelo.';
         setTimeout(() => {
           this.container.removeChild(loadingElement);
         }, 5000);
@@ -662,6 +706,55 @@ class ModelViewer {
           transform: translateX(260px);
         }
       }
+
+      .coords-display {
+        position: fixed;
+        bottom: 1rem;
+        right: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        color: var(--text);
+        font-family: monospace;
+        font-size: 0.875rem;
+        backdrop-filter: blur(5px);
+        z-index: 1000;
+        display: flex;
+        gap: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      }
+
+      .coords-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .coords-title {
+        color: #e0ffe0;
+        font-weight: bold;
+        margin-bottom: 0.25rem;
+        text-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+      }
+
+      @media (max-width: 768px) {
+        .coords-display {
+          bottom: 0.5rem;
+          right: 0.5rem;
+          font-size: 0.75rem;
+          padding: 0.75rem;
+          gap: 1rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .coords-display {
+          flex-direction: column;
+          gap: 0.5rem;
+          max-width: calc(100% - 2rem);
+        }
+      }
     `;
 
     document.head.appendChild(style);
@@ -673,17 +766,81 @@ class ModelViewer {
   }
   
   animate() {
-    requestAnimationFrame(this.animate.bind(this));
+    this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
     
     // Actualizar controles
     this.controls.update();
     
-    // Si hay un modelo, rotarlo suavemente cuando no se interactúa
-    if (this.currentModel && !this.controls.enableDamping) {
-      this.currentModel.rotation.y += 0.21;
-    }
+    // Actualizar coordenadas en cada frame
+    this.updateCoordinatesDisplay();
     
     this.renderer.render(this.scene, this.camera);
+  }
+
+  updateCoordinatesDisplay() {
+    if (!this.coordsDisplay) return;
+
+    let statsHTML = '';
+
+    // Información de la cámara
+    const cameraPosition = this.camera.position;
+    const cameraTarget = this.controls.target;
+    const cameraDirection = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraDirection);
+    
+    // Calcular distancia al objetivo
+    const distanceToTarget = new THREE.Vector3()
+      .subVectors(cameraPosition, cameraTarget)
+      .length();
+
+    // Calcular ángulo de visión vertical actual
+    const verticalAngle = THREE.MathUtils.radToDeg(
+      Math.atan2(cameraPosition.y - cameraTarget.y, 
+                 new THREE.Vector3(cameraPosition.x - cameraTarget.x, 0, cameraPosition.z - cameraTarget.z).length())
+    );
+
+    statsHTML += `
+      <div class="coords-group">
+        <div class="coords-title">Camera</div>
+        <div class="coord-value">Position: ${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)}</div>
+        <div class="coord-value">Target: ${cameraTarget.x.toFixed(2)}, ${cameraTarget.y.toFixed(2)}, ${cameraTarget.z.toFixed(2)}</div>
+        <div class="coord-value">Distance: ${distanceToTarget.toFixed(2)} units</div>
+        <div class="coord-value">Vertical Angle: ${verticalAngle.toFixed(1)}°</div>
+        <div class="coord-value">FOV: ${this.camera.fov.toFixed(1)}°</div>
+        <div class="coord-value">Aspect: ${this.camera.aspect.toFixed(3)}</div>
+      </div>
+    `;
+
+    // Información del modelo si existe
+    if (this.currentModel) {
+      const objBBox = new THREE.Box3().setFromObject(this.currentModel);
+      const objSize = new THREE.Vector3();
+      objBBox.getSize(objSize);
+      const objCenter = new THREE.Vector3();
+      objBBox.getCenter(objCenter);
+      const volume = objSize.x * objSize.y * objSize.z;
+
+      const worldPosition = new THREE.Vector3();
+      const worldScale = new THREE.Vector3();
+      
+      this.currentModel.updateMatrixWorld(true);
+      this.currentModel.getWorldPosition(worldPosition);
+      this.currentModel.getWorldScale(worldScale);
+
+      statsHTML += `
+        <div class="coords-group">
+          <div class="coords-title">Model</div>
+          <div class="coord-value">Position: ${worldPosition.x.toFixed(3)}, ${worldPosition.y.toFixed(3)}, ${worldPosition.z.toFixed(3)}</div>
+          <div class="coord-value">Dimensions: ${objSize.x.toFixed(3)} × ${objSize.y.toFixed(3)} × ${objSize.z.toFixed(3)}</div>
+          <div class="coord-value">Volume: ${volume.toFixed(3)} cubic units</div>
+          <div class="coord-value">Center: ${objCenter.x.toFixed(3)}, ${objCenter.y.toFixed(3)}, ${objCenter.z.toFixed(3)}</div>
+          <div class="coord-value">Scale: ${worldScale.x.toFixed(5)}</div>
+          <div class="coord-value">Height from Ground: ${(worldPosition.y - (objSize.y/2)).toFixed(3)} units</div>
+        </div>
+      `;
+    }
+
+    this.coordsDisplay.innerHTML = statsHTML;
   }
 
   startShelfStatusPolling() {
@@ -804,6 +961,24 @@ class ModelViewer {
         clearTimeout(pollTimeoutId);
       }
     };
+  }
+
+  // Mejorar el método dispose para limpiar todos los recursos
+  dispose() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+    }
+    if (this.coordsDisplay && this.coordsDisplay.parentNode) {
+      this.coordsDisplay.parentNode.removeChild(this.coordsDisplay);
+    }
+    if (this.controls) {
+      this.controls.dispose();
+    }
+    // Limpiar eventos y referencias
+    this.currentModel = null;
+    this.scene = null;
+    this.camera = null;
+    this.renderer.dispose();
   }
 }
 
