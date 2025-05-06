@@ -308,9 +308,11 @@ class ModelViewer {
           mesh.scale.set(0.005, 0.005, 0.005);
           console.log('Aplicando escala fija para silla/estante:', mesh.scale);
 
-          // Desplazar el estante hacia arriba si es un shelf
+          // Alinear la base del shelf con el suelo (height from ground = 0)
           if (fileName.toLowerCase().includes('shelf')) {
-            mesh.position.y += 10;
+            // Obtener el bounding box después de escalar
+            const bbox = new THREE.Box3().setFromObject(mesh);
+            mesh.position.y = -bbox.min.y * mesh.scale.y + 8.529;
           }
         } else {
           // Para otros modelos, mantener la escala proporcional
@@ -343,8 +345,9 @@ class ModelViewer {
 
         // Valores fijos para shelf y silla
         if (fileName.toLowerCase().includes('shelf')) {
-          this.camera.position.set(0.12, 8.07, 9.48);
-          this.controls.target.set(-0.02, 6.00, 1.07);
+          this.camera.position.set(5.10, 4.85, 9.99);
+          this.controls.target.set(1.28, 3.82, 0.12);
+          this.addDraggableShoe(4.608);
         } else if (fileName.toLowerCase().includes('silla')) {
           this.camera.position.set(0.16, 2.45, 4.31);
           this.controls.target.set(0.16, 0.53, 0.80);
@@ -841,6 +844,62 @@ class ModelViewer {
     }
 
     this.coordsDisplay.innerHTML = statsHTML;
+
+    // Mostrar datos del zapato rojo si existe
+    if (this.shoeRojo) {
+      const shoe = this.shoeRojo;
+      const shoeBBox = new THREE.Box3().setFromObject(shoe);
+      const shoeSize = new THREE.Vector3();
+      shoeBBox.getSize(shoeSize);
+      const shoeCenter = new THREE.Vector3();
+      shoeBBox.getCenter(shoeCenter);
+      const shoeVolume = shoeSize.x * shoeSize.y * shoeSize.z;
+      const shoeWorldPosition = new THREE.Vector3();
+      const shoeWorldScale = new THREE.Vector3();
+      shoe.updateMatrixWorld(true);
+      shoe.getWorldPosition(shoeWorldPosition);
+      shoe.getWorldScale(shoeWorldScale);
+      const shoeHeightFromGround = (shoeWorldPosition.y - (shoeSize.y/2)).toFixed(3);
+      this.coordsDisplay.innerHTML += `
+        <div class="coords-group">
+          <div class="coords-title">Shoe (Rojo)</div>
+          <div class="coord-value">Position: ${shoeWorldPosition.x.toFixed(3)}, ${shoeWorldPosition.y.toFixed(3)}, ${shoeWorldPosition.z.toFixed(3)}</div>
+          <div class="coord-value">Dimensions: ${shoeSize.x.toFixed(3)} × ${shoeSize.y.toFixed(3)} × ${shoeSize.z.toFixed(3)}</div>
+          <div class="coord-value">Volume: ${shoeVolume.toFixed(3)} cubic units</div>
+          <div class="coord-value">Center: ${shoeCenter.x.toFixed(3)}, ${shoeCenter.y.toFixed(3)}, ${shoeCenter.z.toFixed(3)}</div>
+          <div class="coord-value">Scale: ${shoeWorldScale.x.toFixed(5)}</div>
+          <div class="coord-value">Height from Ground: ${shoeHeightFromGround} units</div>
+        </div>
+      `;
+    }
+
+    // Mostrar datos del zapato azul si existe
+    if (this.shoeAzul) {
+      const shoe = this.shoeAzul;
+      const shoeBBox = new THREE.Box3().setFromObject(shoe);
+      const shoeSize = new THREE.Vector3();
+      shoeBBox.getSize(shoeSize);
+      const shoeCenter = new THREE.Vector3();
+      shoeBBox.getCenter(shoeCenter);
+      const shoeVolume = shoeSize.x * shoeSize.y * shoeSize.z;
+      const shoeWorldPosition = new THREE.Vector3();
+      const shoeWorldScale = new THREE.Vector3();
+      shoe.updateMatrixWorld(true);
+      shoe.getWorldPosition(shoeWorldPosition);
+      shoe.getWorldScale(shoeWorldScale);
+      const shoeHeightFromGround = (shoeWorldPosition.y - (shoeSize.y/2)).toFixed(3);
+      this.coordsDisplay.innerHTML += `
+        <div class="coords-group">
+          <div class="coords-title">Shoe (Azul)</div>
+          <div class="coord-value">Position: ${shoeWorldPosition.x.toFixed(3)}, ${shoeWorldPosition.y.toFixed(3)}, ${shoeWorldPosition.z.toFixed(3)}</div>
+          <div class="coord-value">Dimensions: ${shoeSize.x.toFixed(3)} × ${shoeSize.y.toFixed(3)} × ${shoeSize.z.toFixed(3)}</div>
+          <div class="coord-value">Volume: ${shoeVolume.toFixed(3)} cubic units</div>
+          <div class="coord-value">Center: ${shoeCenter.x.toFixed(3)}, ${shoeCenter.y.toFixed(3)}, ${shoeCenter.z.toFixed(3)}</div>
+          <div class="coord-value">Scale: ${shoeWorldScale.x.toFixed(5)}</div>
+          <div class="coord-value">Height from Ground: ${shoeHeightFromGround} units</div>
+        </div>
+      `;
+    }
   }
 
   startShelfStatusPolling() {
@@ -961,6 +1020,42 @@ class ModelViewer {
         clearTimeout(pollTimeoutId);
       }
     };
+  }
+
+  async addDraggableShoe(yPosition = 4.608) {
+    // Cargar Shoe.ply
+    const loader = new PLYLoader();
+    loader.load('./models/Shoe.ply', (geometry) => {
+      geometry.computeVertexNormals();
+      geometry.center();
+      const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+      const shoe = new THREE.Mesh(geometry, material);
+      shoe.name = 'shoe_rojo';
+      shoe.scale.set(0.0237, 0.0237, 0.0237);
+      shoe.position.set(0, yPosition, 0);
+      this.scene.add(shoe);
+      this.shoeRojo = shoe;
+      // Drag removido
+      // this.enableDragOnShoe();
+
+      // Agregar zapato azul, mismo X y Z, Y desplazado (ejemplo: 2.5)
+      this.addBlueShoe(2.5);
+    });
+  }
+
+  addBlueShoe(yPosition = 2.5) {
+    const loader = new PLYLoader();
+    loader.load('./models/Shoe.ply', (geometry) => {
+      geometry.computeVertexNormals();
+      geometry.center();
+      const material = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+      const shoe = new THREE.Mesh(geometry, material);
+      shoe.name = 'shoe_azul';
+      shoe.scale.set(0.0237, 0.0237, 0.0237);
+      shoe.position.set(0, yPosition-.123, 0);
+      this.scene.add(shoe);
+      this.shoeAzul = shoe;
+    });
   }
 
   // Mejorar el método dispose para limpiar todos los recursos
