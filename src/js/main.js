@@ -1211,54 +1211,51 @@ class ModelViewer {
     }
     if (!this.occupancyBox) {
       this.occupancyBox = document.createElement('div');
-      this.occupancyBox.className = 'occupancy-box';
-      this.occupancyBox.style.position = 'fixed';
+      this.occupancyBox.className = 'shelf-occupancy-box';
+      this.occupancyBox.style.position = 'absolute';
       this.occupancyBox.style.top = '1rem';
       this.occupancyBox.style.right = '1rem';
-      this.occupancyBox.style.left = '';
       this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
       this.occupancyBox.style.color = '#fff';
       this.occupancyBox.style.padding = '1.2rem 1.5rem';
       this.occupancyBox.style.borderRadius = '12px';
       this.occupancyBox.style.fontFamily = 'monospace';
       this.occupancyBox.style.fontSize = '1rem';
-      this.occupancyBox.style.zIndex = 2000;
+      this.occupancyBox.style.zIndex = '2000';
       this.occupancyBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
-      this.occupancyBox.style.maxWidth = '90vw';
+      this.occupancyBox.style.maxWidth = '90%';
       this.occupancyBox.style.wordBreak = 'break-word';
       this.occupancyBox.style.display = 'flex';
       this.occupancyBox.style.flexDirection = 'column';
       this.occupancyBox.style.alignItems = 'flex-start';
       this.occupancyBox.style.gap = '0.5rem';
-      document.body.appendChild(this.occupancyBox);
+      this.container.appendChild(this.occupancyBox);
 
-      // Media query para móvil: centrado fijo abajo
+      // Estilos encapsulados
       const style = document.createElement('style');
       style.textContent = `
-        @media (max-width: 600px) {
-          .occupancy-box {
-            left: 50% !important;
-            right: auto !important;
-            top: auto !important;
-            bottom: 0.5rem !important;
-            transform: translateX(-50%) !important;
-            max-width: 98vw !important;
-            font-size: 0.95rem !important;
-            padding: 0.8rem 0.5rem !important;
-            border-radius: 10px !important;
-            position: fixed !important;
-            z-index: 2000 !important;
-          }
-        }
-        .occupancy-box .sensor-row {
+        .shelf-occupancy-box .sensor-row {
           display: flex;
           flex-direction: row;
           gap: 1.2rem;
           flex-wrap: wrap;
           margin-top: 0.5rem;
         }
-        .occupancy-box .sensor-item {
+        .shelf-occupancy-box .sensor-item {
           min-width: 90px;
+        }
+        @media (max-width: 600px) {
+          .shelf-occupancy-box {
+            left: 50% !important;
+            right: auto !important;
+            top: auto !important;
+            bottom: 0.5rem !important;
+            transform: translateX(-50%) !important;
+            max-width: 98% !important;
+            font-size: 0.95rem !important;
+            padding: 0.8rem 0.5rem !important;
+            border-radius: 10px !important;
+          }
         }
       `;
       document.head.appendChild(style);
@@ -1312,6 +1309,140 @@ class ModelViewer {
   }
 }
 
+// Crear el componente embebible
+class ShelfViewer extends ModelViewer {
+  constructor(containerId = 'shelf-viewer-container') {
+    super(containerId);
+    this.container.style.position = 'relative';
+    this.container.style.width = '100%';
+    this.container.style.height = '100%';
+    this.container.style.minHeight = '400px';
+    this.container.style.overflow = 'hidden';
+  }
+
+  // Sobrescribir el método de creación del occupancy box para que sea relativo al contenedor
+  showShelfOccupancyBox(occupancy1, occupancy2, temp = null, hum = null) {
+    if (!this.isShelfModel) {
+      if (this.occupancyBox) this.occupancyBox.style.display = 'none';
+      return;
+    }
+    if (!this.occupancyBox) {
+      this.occupancyBox = document.createElement('div');
+      this.occupancyBox.className = 'shelf-occupancy-box';
+      this.occupancyBox.style.position = 'absolute';
+      this.occupancyBox.style.top = '1rem';
+      this.occupancyBox.style.right = '1rem';
+      this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
+      this.occupancyBox.style.color = '#fff';
+      this.occupancyBox.style.padding = '1.2rem 1.5rem';
+      this.occupancyBox.style.borderRadius = '12px';
+      this.occupancyBox.style.fontFamily = 'monospace';
+      this.occupancyBox.style.fontSize = '1rem';
+      this.occupancyBox.style.zIndex = '2000';
+      this.occupancyBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
+      this.occupancyBox.style.maxWidth = '90%';
+      this.occupancyBox.style.wordBreak = 'break-word';
+      this.occupancyBox.style.display = 'flex';
+      this.occupancyBox.style.flexDirection = 'column';
+      this.occupancyBox.style.alignItems = 'flex-start';
+      this.occupancyBox.style.gap = '0.5rem';
+      this.container.appendChild(this.occupancyBox);
+
+      // Estilos encapsulados
+      const style = document.createElement('style');
+      style.textContent = `
+        .shelf-occupancy-box .sensor-row {
+          display: flex;
+          flex-direction: row;
+          gap: 1.2rem;
+          flex-wrap: wrap;
+          margin-top: 0.5rem;
+        }
+        .shelf-occupancy-box .sensor-item {
+          min-width: 90px;
+        }
+        @media (max-width: 600px) {
+          .shelf-occupancy-box {
+            left: 50% !important;
+            right: auto !important;
+            top: auto !important;
+            bottom: 0.5rem !important;
+            transform: translateX(-50%) !important;
+            max-width: 98% !important;
+            font-size: 0.95rem !important;
+            padding: 0.8rem 0.5rem !important;
+            border-radius: 10px !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    // Calcular ocupación
+    const totalEstantes = 10;
+    const volumenPorEstante = 0.025; // m³
+    let ocupados = 0;
+    if (occupancy1) ocupados++;
+    if (occupancy2) ocupados++;
+    const metrosUsados = ocupados * volumenPorEstante;
+    const porcentaje = ((metrosUsados / (totalEstantes * volumenPorEstante)) * 100).toFixed(1);
+    let html = '';
+    if (ocupados > 0) {
+      html += `<div><b>Estantes ocupados:</b> ${ocupados}</div>`;
+      html += `<div><b>Metros usados:</b> ${metrosUsados.toFixed(3)} m³</div>`;
+      html += `<div><b>Porcentaje de ocupación:</b> ${porcentaje}%</div>`;
+    }
+    if (temp !== null || hum !== null) {
+      html += `<div class='sensor-row'>
+        <div class='sensor-item'><b>Temp:</b> ${temp !== null ? temp : '--'} °C</div>
+        <div class='sensor-item'><b>Humedad:</b> ${hum !== null ? hum : '--'} %</div>
+      </div>`;
+    }
+    this.occupancyBox.innerHTML = html;
+    this.occupancyBox.style.display = (html) ? 'block' : 'none';
+  }
+}
+
+// API para inicializar el componente
+window.initShelfViewer = function(containerId, options = {}) {
+  const viewer = new ShelfViewer(containerId);
+  
+  // Configurar opciones por defecto
+  const defaultOptions = {
+    width: '100%',
+    height: '400px',
+    models: [
+      { name: 'Estante', path: './models/Shelf.obj' },
+      { name: 'Silla', path: './models/Silla.ply' }
+    ]
+  };
+
+  // Aplicar opciones personalizadas
+  const config = { ...defaultOptions, ...options };
+  
+  // Aplicar dimensiones
+  const container = document.getElementById(containerId);
+  if (container) {
+    container.style.width = config.width;
+    container.style.height = config.height;
+  }
+
+  // Inicializar el visor
+  viewer.createModelSelector(config.models);
+  viewer.animate();
+
+  return viewer;
+};
+
+// Ejemplo de uso:
+/*
+<div id="shelf-viewer-container"></div>
+<script>
+  const viewer = initShelfViewer('shelf-viewer-container', {
+    width: '800px',
+    height: '600px'
+  });
+</script>
+*/
 
 document.addEventListener('DOMContentLoaded', () => {
   const viewer = new ModelViewer('viewer-container');

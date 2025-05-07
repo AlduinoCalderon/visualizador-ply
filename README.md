@@ -1,21 +1,15 @@
 # Digital Twin Viewer
 
-<p align="center">
-  <img src="public/logo512.png" width="200" alt="Digital Twin Viewer Logo">
-</p>
-
-Un visor 3D interactivo para modelos PLY y OBJ, diseñado para visualizar gemelos digitales y modelos 3D de manera eficiente y sencilla.
+Visualizador 3D de gemelos digitales con soporte para sensores en tiempo real.
 
 ## Características
 
-- 🎮 Visualización interactiva de modelos 3D
-- 📁 Soporte para formatos PLY y OBJ
-- 🔄 Rotación automática de modelos
-- 🖱️ Controles intuitivos de cámara
-- 📱 Diseño responsivo
-- ⚡ Carga rápida de modelos
-- 💾 Carga de archivos locales
-- 🎯 Selector de modelos integrado
+- Visualización 3D de modelos PLY y OBJ
+- Integración con sensores en tiempo real
+- Monitoreo de ocupación y métricas
+- Componente embebible para integración en otras páginas
+- Soporte para múltiples modelos
+- Interfaz responsiva
 
 ## Tecnologías
 
@@ -28,7 +22,7 @@ Un visor 3D interactivo para modelos PLY y OBJ, diseñado para visualizar gemelo
 
 1. Clona el repositorio:
 ```bash
-git clone https://github.com/AlduinoCalderon/digital-twin-viewer.git
+git clone https://github.com/tu-usuario/digital-twin-viewer.git
 cd digital-twin-viewer
 ```
 
@@ -42,31 +36,101 @@ npm install
 npm run dev
 ```
 
-## Uso
+## Uso como Componente Embebible
 
-1. Selecciona un modelo predefinido del menú desplegable
-2. O carga tu propio archivo PLY/OBJ usando el botón "Cargar archivo local"
-3. Interactúa con el modelo usando:
-   - Click izquierdo: Rotar
-   - Click derecho: Pan
-   - Rueda del mouse: Zoom
+El visor puede ser embebido fácilmente en cualquier página web. Sigue estos pasos:
 
-## Despliegue
-
-Para construir la aplicación para producción:
-```bash
-npm run build
+1. Incluye el script en tu HTML:
+```html
+<script src="path/to/main.js"></script>
 ```
 
-Para desplegar en GitHub Pages:
-```bash
-npm run deploy
+2. Agrega un contenedor para el visor:
+```html
+<div id="shelf-viewer-container"></div>
 ```
+
+3. Inicializa el visor:
+```html
+<script>
+  const viewer = initShelfViewer('shelf-viewer-container', {
+    width: '800px',
+    height: '600px'
+  });
+</script>
+```
+
+### Opciones de Configuración
+
+El visor acepta las siguientes opciones de configuración:
+
+```javascript
+const options = {
+  width: '100%',           // Ancho del contenedor
+  height: '400px',         // Alto del contenedor
+  models: [                // Lista de modelos disponibles
+    { 
+      name: 'Estante', 
+      path: './models/Shelf.obj' 
+    },
+    { 
+      name: 'Silla', 
+      path: './models/Silla.ply' 
+    }
+  ]
+};
+```
+
+### Ejemplo Completo
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mi Página con Visor 3D</title>
+  <style>
+    #shelf-viewer-container {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mi Visor 3D</h1>
+  
+  <div id="shelf-viewer-container"></div>
+
+  <script src="path/to/main.js"></script>
+  <script>
+    const viewer = initShelfViewer('shelf-viewer-container', {
+      width: '800px',
+      height: '600px'
+    });
+  </script>
+</body>
+</html>
+```
+
+## Características del Componente
+
+- **Responsive**: Se adapta automáticamente al tamaño del contenedor
+- **Encapsulado**: Estilos y funcionalidad aislados para evitar conflictos
+- **Configurable**: Personalizable a través de opciones
+- **Tiempo Real**: Actualización automática de sensores y métricas
+- **Interactivo**: Controles de cámara y selección de modelos
+
+## Notas Importantes
+
+1. **Rutas de Modelos**: Asegúrate de que las rutas a los modelos sean correctas en tu configuración.
+2. **CORS**: Si los modelos están en otro dominio, asegúrate de que CORS esté configurado correctamente.
+3. **WebSocket**: El componente requiere una conexión WebSocket para las actualizaciones en tiempo real.
+4. **Fallback**: Si no hay actualizaciones vía WebSocket por más de 1 minuto, se consultará la API de MongoDB.
 
 ## Autor
 
-Alduino Calderon
+Desarrollado por [AlduinoCalderon](https://github.com/AlduinoCalderon)
 
 ## Licencia
 
-MIT
+Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE.md](LICENSE.md) para más detalles.
