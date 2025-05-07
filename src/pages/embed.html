@@ -20,7 +20,7 @@
 <body>
     <div id="viewer-container"></div>
     <script type="module">
-        // Importar desde la raíz del proyecto para que funcione en ambos entornos
+        // Importar desde la raíz del proyecto
         import { initShelfViewer } from '/src/js/main.js';
         
         // Inicializar el visor inmediatamente con el estante
@@ -29,7 +29,7 @@
                 models: [
                     { 
                         name: 'Estante', 
-                        path: '/models/Shelf.obj'  // Ruta absoluta desde la raíz
+                        path: '/models/Shelf.obj'
                     }
                 ]
             });

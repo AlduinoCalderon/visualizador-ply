@@ -8,15 +8,15 @@ export default defineConfig({
     assetsDir: 'assets',
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        embed: resolve(__dirname, 'src/pages/embed.html')
+      },
       output: {
         manualChunks: {
           'three': ['three'],
           'loaders': ['three/examples/jsm/loaders/PLYLoader.js', 'three/examples/jsm/loaders/OBJLoader.js'],
           'controls': ['three/examples/jsm/controls/OrbitControls.js']
-        },
-        input: {
-          main: resolve(__dirname, 'index.html'),
-          embed: resolve(__dirname, 'src/pages/embed.html')
         }
       }
     }

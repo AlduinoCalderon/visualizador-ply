@@ -1311,13 +1311,35 @@ class ModelViewer {
 
 // Crear el componente embebible
 class ShelfViewer extends ModelViewer {
-  constructor(containerId = 'shelf-viewer-container') {
-    super(containerId);
-    this.container.style.position = 'relative';
-    this.container.style.width = '100%';
-    this.container.style.height = '100%';
-    this.container.style.minHeight = '400px';
-    this.container.style.overflow = 'hidden';
+  constructor(container, config = {}) {
+    super(container);
+    this.container = container;
+    this.config = config;
+    
+    // Aplicar dimensiones
+    this.container.style.width = config.width || '100%';
+    this.container.style.height = config.height || '100%';
+    
+    // Inicializar Three.js
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.container.appendChild(this.renderer.domElement);
+    
+    // Configurar controles
+    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+    
+    // Configurar iluminación
+    this.setupLights();
+    
+    // Configurar eventos
+    window.addEventListener('resize', () => this.onWindowResize());
+    
+    // Iniciar animación
+    this.animate();
   }
 
   // Sobrescribir el método de creación del occupancy box para que sea relativo al contenedor
@@ -1402,37 +1424,34 @@ class ShelfViewer extends ModelViewer {
   }
 }
 
-// API para inicializar el componente
+// Exportar la función para uso en modo embebido
 export function initShelfViewer(containerId, options = {}) {
-  const viewer = new ShelfViewer(containerId);
-  
-  // Configurar opciones por defecto
-  const defaultOptions = {
-    width: '100%',
-    height: '100%',
-    models: [
-      { name: 'Estante', path: './models/Shelf.obj' }
-    ]
-  };
+    const defaultOptions = {
+        width: '100%',
+        height: '100%',
+        showControls: true,
+        showStats: true,
+        showOccupancyBox: true
+    };
 
-  // Aplicar opciones personalizadas
-  const config = { ...defaultOptions, ...options };
-  
-  // Aplicar dimensiones
-  const container = document.getElementById(containerId);
-  if (container) {
-    container.style.width = config.width;
-    container.style.height = config.height;
-  }
+    const config = { ...defaultOptions, ...options };
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.error(`Container with id "${containerId}" not found`);
+        return null;
+    }
 
-  // Inicializar el visor y cargar el estante por defecto
-  viewer.createModelSelector(config.models);
-  viewer.animate();
-  
-  // Cargar el estante inmediatamente
-  viewer.loadModel('./models/Shelf.obj');
+    const viewer = new ShelfViewer(container, config);
+    
+    // Cargar el modelo del estante por defecto si no se especifica otro
+    if (config.models && config.models.length > 0) {
+        viewer.loadModel(config.models[0].path, config.models[0].name);
+    } else {
+        viewer.loadModel('/models/Shelf.obj', 'Estante');
+    }
 
-  return viewer;
+    return viewer;
 }
 
 // Ejemplo de uso simplificado:
