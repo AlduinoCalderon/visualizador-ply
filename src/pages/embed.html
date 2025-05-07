@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: white;
+        }
+        #viewer-container {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewer-container"></div>
+    <script type="module">
+        // Importar desde la raíz del proyecto para que funcione en ambos entornos
+        import { initShelfViewer } from '/src/js/main.js';
+        
+        // Inicializar el visor inmediatamente con el estante
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewer = initShelfViewer('viewer-container', {
+                models: [
+                    { 
+                        name: 'Estante', 
+                        path: '/models/Shelf.obj'  // Ruta absoluta desde la raíz
+                    }
+                ]
+            });
+            console.log('Visor embebido inicializado:', viewer);
+        });
+    </script>
+</body>
+</html> 

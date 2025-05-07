@@ -427,7 +427,7 @@ class ModelViewer {
                   proximity1: data.proximity1?.value || 100,
                   proximity2: data.proximity2?.value || 100
                 });
-              } catch (error) {
+        } catch (error) {
                 console.error('Error en fallback fetch:', error);
               }
               if (isFirstFallback) {
@@ -1403,13 +1403,13 @@ class ShelfViewer extends ModelViewer {
 }
 
 // API para inicializar el componente
-window.initShelfViewer = function(containerId, options = {}) {
+export function initShelfViewer(containerId, options = {}) {
   const viewer = new ShelfViewer(containerId);
   
   // Configurar opciones por defecto
   const defaultOptions = {
     width: '100%',
-    height: '400px',
+    height: '100%',
     models: [
       { name: 'Estante', path: './models/Shelf.obj' }
     ]
@@ -1433,7 +1433,7 @@ window.initShelfViewer = function(containerId, options = {}) {
   viewer.loadModel('./models/Shelf.obj');
 
   return viewer;
-};
+}
 
 // Ejemplo de uso simplificado:
 /*
