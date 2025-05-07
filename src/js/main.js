@@ -357,6 +357,61 @@ class ModelViewer {
           const FALLBACK_TIMEOUT = 60000; // 1 minuto
           const SUBSEQUENT_FALLBACK_TIMEOUT = 300000; // 5 minutos
           let isFirstFallback = true;
+          const PROXIMITY_THRESHOLD = 39; // Umbral en centímetros
+
+          // Configuración de zapatos
+          const shoeConfig = [
+            { id: 'shoe_rojo', color: 0xff0000, yPosition: 4.608 },
+            { id: 'shoe_azul', color: 0x0000ff, yPosition: 2.5 }
+          ];
+
+          // Función para crear un zapato
+          const createShoe = (config) => {
+            const loader = new PLYLoader();
+            return new Promise((resolve) => {
+              loader.load('./models/Shoe.ply', (geometry) => {
+                geometry.computeVertexNormals();
+                geometry.center();
+                const material = new THREE.MeshStandardMaterial({ color: config.color });
+                const shoe = new THREE.Mesh(geometry, material);
+                shoe.name = config.id;
+                shoe.scale.set(0.0237, 0.0237, 0.0237);
+                shoe.position.set(0, config.yPosition, 0);
+                shoe.visible = false;
+                this.scene.add(shoe);
+                resolve(shoe);
+              });
+            });
+          };
+
+          // Inicializar zapatos
+          const initializeShoes = async () => {
+            for (const config of shoeConfig) {
+              const shoe = await createShoe(config);
+              this[config.id] = shoe;
+            }
+          };
+
+          // Función para actualizar estado de zapatos
+          const updateShoesState = (sensorData) => {
+            if (!this.isShelfModel) return;
+            
+            // Actualizar estado de cada zapato basado en los datos del sensor
+            if (this.shoeRojo) {
+              this.shoeRojo.visible = sensorData.proximity1 < PROXIMITY_THRESHOLD;
+            }
+            if (this.shoeAzul) {
+              this.shoeAzul.visible = sensorData.proximity2 < PROXIMITY_THRESHOLD;
+            }
+
+            // Actualizar UI
+            this.showShelfOccupancyBox(
+              this.shoeRojo && this.shoeRojo.visible,
+              this.shoeAzul && this.shoeAzul.visible,
+              temp,
+              hum
+            );
+          };
 
           const resetTimer = () => {
             if (lastUpdateTimer) clearTimeout(lastUpdateTimer);
@@ -368,20 +423,13 @@ class ModelViewer {
                 });
                 if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
                 const data = await response.json();
-                const proximity1Value = data.proximity1?.value || 100;
-                const proximity2Value = data.proximity2?.value || 100;
-                if (this.shoeRojo) this.shoeRojo.visible = proximity1Value < 50;
-                if (this.shoeAzul) this.shoeAzul.visible = proximity2Value < 50;
-                this.showShelfOccupancyBox(
-                  this.shoeRojo && this.shoeRojo.visible,
-                  this.shoeAzul && this.shoeAzul.visible,
-                  temp,
-                  hum
-                );
+                updateShoesState({
+                  proximity1: data.proximity1?.value || 100,
+                  proximity2: data.proximity2?.value || 100
+                });
               } catch (error) {
                 console.error('Error en fallback fetch:', error);
               }
-              // Después de la primera activación, cambiar el timeout a 5 minutos
               if (isFirstFallback) {
                 isFirstFallback = false;
                 lastUpdateTimer = setTimeout(resetTimer, SUBSEQUENT_FALLBACK_TIMEOUT);
@@ -389,52 +437,51 @@ class ModelViewer {
             }, FALLBACK_TIMEOUT);
           };
 
-          setupWebSocket();
-          subscribeSensor('warehouse/unit/1/sensor/proximity1', (message) => {
-            if (!this.isShelfModel) return;
-            if (this.shoeRojo) this.shoeRojo.visible = message.value < 50;
-            this.showShelfOccupancyBox(
-              this.shoeRojo && this.shoeRojo.visible,
-              this.shoeAzul && this.shoeAzul.visible,
-              temp,
-              hum
-            );
+          // Inicializar zapatos y configurar WebSocket
+          initializeShoes().then(() => {
+            setupWebSocket();
+            
+            // Configurar suscripciones de sensores
+            subscribeSensor('warehouse/unit/1/sensor/proximity1', (message) => {
+              if (!this.isShelfModel) return;
+              updateShoesState({
+                proximity1: message.value,
+                proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
+              });
+              resetTimer();
+            });
+
+            subscribeSensor('warehouse/unit/1/sensor/proximity2', (message) => {
+              if (!this.isShelfModel) return;
+              updateShoesState({
+                proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
+                proximity2: message.value
+              });
+              resetTimer();
+            });
+
+            subscribeSensor('warehouse/unit/1/sensor/temperature', (message) => {
+              if (!this.isShelfModel) return;
+              temp = message.value;
+              updateShoesState({
+                proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
+                proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
+              });
+              resetTimer();
+            });
+
+            subscribeSensor('warehouse/unit/1/sensor/humidity', (message) => {
+              if (!this.isShelfModel) return;
+              hum = message.value;
+              updateShoesState({
+                proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
+                proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
+              });
+              resetTimer();
+            });
+
             resetTimer();
           });
-          subscribeSensor('warehouse/unit/1/sensor/proximity2', (message) => {
-            if (!this.isShelfModel) return;
-            if (this.shoeAzul) this.shoeAzul.visible = message.value < 50;
-            this.showShelfOccupancyBox(
-              this.shoeRojo && this.shoeRojo.visible,
-              this.shoeAzul && this.shoeAzul.visible,
-              temp,
-              hum
-            );
-            resetTimer();
-          });
-          subscribeSensor('warehouse/unit/1/sensor/temperature', (message) => {
-            if (!this.isShelfModel) return;
-            temp = message.value;
-            this.showShelfOccupancyBox(
-              this.shoeRojo && this.shoeRojo.visible,
-              this.shoeAzul && this.shoeAzul.visible,
-              temp,
-              hum
-            );
-            resetTimer();
-          });
-          subscribeSensor('warehouse/unit/1/sensor/humidity', (message) => {
-            if (!this.isShelfModel) return;
-            hum = message.value;
-            this.showShelfOccupancyBox(
-              this.shoeRojo && this.shoeRojo.visible,
-              this.shoeAzul && this.shoeAzul.visible,
-              temp,
-              hum
-            );
-            resetTimer();
-          });
-          resetTimer();
         } else if (fileName.toLowerCase().includes('silla')) {
           this.camera.position.set(0.16, 2.45, 4.31);
           this.controls.target.set(0.16, 0.53, 0.80);
@@ -1010,7 +1057,7 @@ class ModelViewer {
       console.log(`[Shelf ${shelf.name}] Estado:`, {
         ocupado: isOccupied,
         valorSensor: sensorValue,
-        umbral: 39,
+        umbral: 50,
         mensaje: isOccupied ? '⚠️ ESTANTE OCUPADO ⚠️' : '✅ ESTANTE DISPONIBLE'
       });
       
@@ -1077,12 +1124,12 @@ class ModelViewer {
         console.log('\n[Análisis de Sensores]', {
           proximity1: {
             valor: proximity1Value,
-            umbral: 39,
+            umbral: 50,
             ocupado: shelf3Occupied
           },
           proximity2: {
             valor: proximity2Value,
-            umbral: 39,
+            umbral: 50,
             ocupado: shelf6Occupied
           }
         });
