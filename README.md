@@ -149,23 +149,10 @@ El componente está disponible públicamente en [https://3dvisualizer-coral.verc
 <div id="shelf-viewer-container"></div>
 ```
 
-3. Inicializa el visor:
+3. Inicializa el visor (el estante y la occupancy box se cargarán automáticamente):
 ```html
 <script>
-  const viewer = initShelfViewer('shelf-viewer-container', {
-    width: '800px',
-    height: '600px',
-    models: [
-      { 
-        name: 'Estante', 
-        path: 'https://3dvisualizer-coral.vercel.app/models/Shelf.obj' 
-      },
-      { 
-        name: 'Silla', 
-        path: 'https://3dvisualizer-coral.vercel.app/models/Silla.ply' 
-      }
-    ]
-  });
+  const viewer = initShelfViewer('shelf-viewer-container');
 </script>
 ```
 
@@ -191,28 +178,35 @@ El componente está disponible públicamente en [https://3dvisualizer-coral.verc
 
   <script src="https://3dvisualizer-coral.vercel.app/main.js"></script>
   <script>
-    const viewer = initShelfViewer('shelf-viewer-container', {
-      width: '800px',
-      height: '600px',
-      models: [
-        { 
-          name: 'Estante', 
-          path: 'https://3dvisualizer-coral.vercel.app/models/Shelf.obj' 
-        },
-        { 
-          name: 'Silla', 
-          path: 'https://3dvisualizer-coral.vercel.app/models/Silla.ply' 
-        }
-      ]
-    });
+    const viewer = initShelfViewer('shelf-viewer-container');
   </script>
 </body>
 </html>
+```
+
+### Opciones de Configuración (Opcional)
+
+Si necesitas personalizar el visor, puedes usar las siguientes opciones:
+
+```javascript
+const options = {
+  width: '100%',           // Ancho del contenedor
+  height: '400px',         // Alto del contenedor
+  models: [                // Lista de modelos disponibles (por defecto solo el estante)
+    { 
+      name: 'Estante', 
+      path: 'https://3dvisualizer-coral.vercel.app/models/Shelf.obj' 
+    }
+  ]
+};
+
+const viewer = initShelfViewer('shelf-viewer-container', options);
 ```
 
 ### Notas sobre el Deploy en Vercel
 
 1. **CORS**: El deploy en Vercel está configurado para aceptar peticiones desde cualquier origen.
 2. **WebSocket**: La conexión WebSocket se establece automáticamente con el servidor de sensores.
-3. **Modelos**: Los modelos están alojados en el mismo deploy de Vercel.
-4. **Actualizaciones**: El componente se actualiza automáticamente cuando hay cambios en el deploy.
+3. **Modelos**: El estante se carga automáticamente al inicializar el visor.
+4. **Occupancy Box**: Se muestra automáticamente con las métricas en tiempo real.
+5. **Actualizaciones**: El componente se actualiza automáticamente cuando hay cambios en el deploy.

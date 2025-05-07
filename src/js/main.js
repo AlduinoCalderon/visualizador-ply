@@ -1411,8 +1411,7 @@ window.initShelfViewer = function(containerId, options = {}) {
     width: '100%',
     height: '400px',
     models: [
-      { name: 'Estante', path: './models/Shelf.obj' },
-      { name: 'Silla', path: './models/Silla.ply' }
+      { name: 'Estante', path: './models/Shelf.obj' }
     ]
   };
 
@@ -1426,21 +1425,21 @@ window.initShelfViewer = function(containerId, options = {}) {
     container.style.height = config.height;
   }
 
-  // Inicializar el visor
+  // Inicializar el visor y cargar el estante por defecto
   viewer.createModelSelector(config.models);
   viewer.animate();
+  
+  // Cargar el estante inmediatamente
+  viewer.loadModel('./models/Shelf.obj');
 
   return viewer;
 };
 
-// Ejemplo de uso:
+// Ejemplo de uso simplificado:
 /*
 <div id="shelf-viewer-container"></div>
 <script>
-  const viewer = initShelfViewer('shelf-viewer-container', {
-    width: '800px',
-    height: '600px'
-  });
+  const viewer = initShelfViewer('shelf-viewer-container');
 </script>
 */
 
