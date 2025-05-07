@@ -134,3 +134,85 @@ Desarrollado por [AlduinoCalderon](https://github.com/AlduinoCalderon)
 ## Licencia
 
 Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE.md](LICENSE.md) para más detalles.
+
+## Uso desde Vercel Deploy
+
+El componente está disponible públicamente en [https://3dvisualizer-coral.vercel.app](https://3dvisualizer-coral.vercel.app). Para usarlo en tu página:
+
+1. Incluye el script desde el deploy:
+```html
+<script src="https://3dvisualizer-coral.vercel.app/main.js"></script>
+```
+
+2. Agrega el contenedor:
+```html
+<div id="shelf-viewer-container"></div>
+```
+
+3. Inicializa el visor:
+```html
+<script>
+  const viewer = initShelfViewer('shelf-viewer-container', {
+    width: '800px',
+    height: '600px',
+    models: [
+      { 
+        name: 'Estante', 
+        path: 'https://3dvisualizer-coral.vercel.app/models/Shelf.obj' 
+      },
+      { 
+        name: 'Silla', 
+        path: 'https://3dvisualizer-coral.vercel.app/models/Silla.ply' 
+      }
+    ]
+  });
+</script>
+```
+
+### Ejemplo de Implementación con Vercel
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mi Página con Visor 3D</title>
+  <style>
+    #shelf-viewer-container {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mi Visor 3D</h1>
+  
+  <div id="shelf-viewer-container"></div>
+
+  <script src="https://3dvisualizer-coral.vercel.app/main.js"></script>
+  <script>
+    const viewer = initShelfViewer('shelf-viewer-container', {
+      width: '800px',
+      height: '600px',
+      models: [
+        { 
+          name: 'Estante', 
+          path: 'https://3dvisualizer-coral.vercel.app/models/Shelf.obj' 
+        },
+        { 
+          name: 'Silla', 
+          path: 'https://3dvisualizer-coral.vercel.app/models/Silla.ply' 
+        }
+      ]
+    });
+  </script>
+</body>
+</html>
+```
+
+### Notas sobre el Deploy en Vercel
+
+1. **CORS**: El deploy en Vercel está configurado para aceptar peticiones desde cualquier origen.
+2. **WebSocket**: La conexión WebSocket se establece automáticamente con el servidor de sensores.
+3. **Modelos**: Los modelos están alojados en el mismo deploy de Vercel.
+4. **Actualizaciones**: El componente se actualiza automáticamente cuando hay cambios en el deploy.
