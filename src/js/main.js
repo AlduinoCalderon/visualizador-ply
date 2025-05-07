@@ -1010,7 +1010,7 @@ class ModelViewer {
       console.log(`[Shelf ${shelf.name}] Estado:`, {
         ocupado: isOccupied,
         valorSensor: sensorValue,
-        umbral: 50,
+        umbral: 39,
         mensaje: isOccupied ? '⚠️ ESTANTE OCUPADO ⚠️' : '✅ ESTANTE DISPONIBLE'
       });
       
