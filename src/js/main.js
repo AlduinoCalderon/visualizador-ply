@@ -1077,12 +1077,12 @@ class ModelViewer {
         console.log('\n[Análisis de Sensores]', {
           proximity1: {
             valor: proximity1Value,
-            umbral: 50,
+            umbral: 39,
             ocupado: shelf3Occupied
           },
           proximity2: {
             valor: proximity2Value,
-            umbral: 50,
+            umbral: 39,
             ocupado: shelf6Occupied
           }
         });
