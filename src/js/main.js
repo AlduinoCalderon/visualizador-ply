@@ -1209,10 +1209,9 @@ class ModelViewer {
     if (!this.occupancyBox) {
       this.occupancyBox = document.createElement('div');
       this.occupancyBox.className = 'occupancy-box';
-      this.occupancyBox.style.position = 'fixed';
+      this.occupancyBox.style.position = 'absolute';
       this.occupancyBox.style.top = '1rem';
       this.occupancyBox.style.right = '1rem';
-      this.occupancyBox.style.left = '';
       this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
       this.occupancyBox.style.color = '#fff';
       this.occupancyBox.style.padding = '1.2rem 1.5rem';
@@ -1227,7 +1226,7 @@ class ModelViewer {
       this.occupancyBox.style.flexDirection = 'column';
       this.occupancyBox.style.alignItems = 'flex-start';
       this.occupancyBox.style.gap = '0.5rem';
-      document.body.appendChild(this.occupancyBox);
+      (this.container || document.body).appendChild(this.occupancyBox);
 
       // Media query para móvil: centrado fijo abajo
       const style = document.createElement('style');
@@ -1243,7 +1242,7 @@ class ModelViewer {
             font-size: 0.95rem !important;
             padding: 0.8rem 0.5rem !important;
             border-radius: 10px !important;
-            position: fixed !important;
+            position: absolute !important;
             z-index: 2000 !important;
           }
         }
