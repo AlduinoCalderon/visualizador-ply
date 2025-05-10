@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/embedded", "destination": "/src/embedded.html" },
+    { "source": "/embedded", "destination": "/embedded.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
