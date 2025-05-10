@@ -1,8 +1,18 @@
 {
   "rewrites": [
+    { "source": "/embedded", "destination": "/src/embedded.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "buildCommand": "npm run build",
-  "outputDirectory": "docs",
-  "framework": "vite"
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOW-FROM *"
+        }
+      ]
+    }
+  ],
+  "outputDirectory": "dist"
 } 

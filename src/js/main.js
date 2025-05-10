@@ -8,6 +8,7 @@ class ModelViewer {
   constructor(containerId = 'viewer-container') {
     this.container = document.getElementById(containerId) || document.body;
     this.currentModel = null;
+    this.isEmbedded = window.location.pathname.includes('/embedded');
     
     // Crear el elemento para mostrar coordenadas
     this.coordsDisplay = document.createElement('div');
@@ -354,10 +355,8 @@ class ModelViewer {
           this.addDraggableShoe(4.608);
           let temp = null, hum = null;
           let lastUpdateTimer = null;
-          const FALLBACK_TIMEOUT = 60000; // 1 minuto
-          const SUBSEQUENT_FALLBACK_TIMEOUT = 300000; // 5 minutos
-          let isFirstFallback = true;
-          const PROXIMITY_THRESHOLD = 39; // Umbral en centímetros
+          const INITIAL_FALLBACK_TIMEOUT = 25000; // 25 segundos
+          let hasCheckedMongo = false;
 
           // Configuración de zapatos
           const shoeConfig = [
@@ -386,10 +385,12 @@ class ModelViewer {
 
           // Inicializar zapatos
           const initializeShoes = async () => {
+            const shoes = [];
             for (const config of shoeConfig) {
               const shoe = await createShoe(config);
-              this[config.id] = shoe;
+              shoes.push(shoe);
             }
+            return shoes;
           };
 
           // Función para actualizar estado de zapatos
@@ -398,10 +399,10 @@ class ModelViewer {
             
             // Actualizar estado de cada zapato basado en los datos del sensor
             if (this.shoeRojo) {
-              this.shoeRojo.visible = sensorData.proximity1 < PROXIMITY_THRESHOLD;
+              this.shoeRojo.visible = sensorData.proximity1 < 39;
             }
             if (this.shoeAzul) {
-              this.shoeAzul.visible = sensorData.proximity2 < PROXIMITY_THRESHOLD;
+              this.shoeAzul.visible = sensorData.proximity2 < 39;
             }
 
             // Actualizar UI
@@ -415,26 +416,27 @@ class ModelViewer {
 
           const resetTimer = () => {
             if (lastUpdateTimer) clearTimeout(lastUpdateTimer);
-            lastUpdateTimer = setTimeout(async () => {
-              try {
-                const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
-                  mode: 'cors',
-                  headers: { 'Accept': 'application/json' }
-                });
-                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-                const data = await response.json();
-                updateShoesState({
-                  proximity1: data.proximity1?.value || 100,
-                  proximity2: data.proximity2?.value || 100
-                });
+            
+            // Solo configurar el timer si no hemos consultado MongoDB aún
+            if (!hasCheckedMongo) {
+              lastUpdateTimer = setTimeout(async () => {
+                try {
+                  const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
+                    mode: 'cors',
+                    headers: { 'Accept': 'application/json' }
+                  });
+                  if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                  const data = await response.json();
+                  updateShoesState({
+                    proximity1: data.proximity1?.value || 100,
+                    proximity2: data.proximity2?.value || 100
+                  });
+                  hasCheckedMongo = true; // Marcar que ya consultamos MongoDB
         } catch (error) {
-                console.error('Error en fallback fetch:', error);
-              }
-              if (isFirstFallback) {
-                isFirstFallback = false;
-                lastUpdateTimer = setTimeout(resetTimer, SUBSEQUENT_FALLBACK_TIMEOUT);
-              }
-            }, FALLBACK_TIMEOUT);
+                  console.error('Error en fallback fetch:', error);
+                }
+              }, INITIAL_FALLBACK_TIMEOUT);
+            }
           };
 
           // Inicializar zapatos y configurar WebSocket
@@ -519,6 +521,16 @@ class ModelViewer {
   }
   
   createModelSelector(models) {
+    // Si estamos en modo embebido, no crear el selector
+    if (this.isEmbedded) {
+      // Cargar directamente el modelo del estante
+      const shelfModel = models.find(model => model.name === 'Estante');
+      if (shelfModel) {
+        this.loadModel(shelfModel.path);
+      }
+      return;
+    }
+
     // Crear el botón de hamburguesa
     const menuButton = document.createElement('button');
     menuButton.className = 'hamburger-menu';
@@ -1211,51 +1223,54 @@ class ModelViewer {
     }
     if (!this.occupancyBox) {
       this.occupancyBox = document.createElement('div');
-      this.occupancyBox.className = 'shelf-occupancy-box';
-      this.occupancyBox.style.position = 'absolute';
+      this.occupancyBox.className = 'occupancy-box';
+      this.occupancyBox.style.position = 'fixed';
       this.occupancyBox.style.top = '1rem';
       this.occupancyBox.style.right = '1rem';
+      this.occupancyBox.style.left = '';
       this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
       this.occupancyBox.style.color = '#fff';
       this.occupancyBox.style.padding = '1.2rem 1.5rem';
       this.occupancyBox.style.borderRadius = '12px';
       this.occupancyBox.style.fontFamily = 'monospace';
       this.occupancyBox.style.fontSize = '1rem';
-      this.occupancyBox.style.zIndex = '2000';
+      this.occupancyBox.style.zIndex = 2000;
       this.occupancyBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
-      this.occupancyBox.style.maxWidth = '90%';
+      this.occupancyBox.style.maxWidth = '90vw';
       this.occupancyBox.style.wordBreak = 'break-word';
       this.occupancyBox.style.display = 'flex';
       this.occupancyBox.style.flexDirection = 'column';
       this.occupancyBox.style.alignItems = 'flex-start';
       this.occupancyBox.style.gap = '0.5rem';
-      this.container.appendChild(this.occupancyBox);
+      document.body.appendChild(this.occupancyBox);
 
-      // Estilos encapsulados
+      // Media query para móvil: centrado fijo abajo
       const style = document.createElement('style');
       style.textContent = `
-        .shelf-occupancy-box .sensor-row {
+        @media (max-width: 600px) {
+          .occupancy-box {
+            left: 50% !important;
+            right: auto !important;
+            top: auto !important;
+            bottom: 0.5rem !important;
+            transform: translateX(-50%) !important;
+            max-width: 98vw !important;
+            font-size: 0.95rem !important;
+            padding: 0.8rem 0.5rem !important;
+            border-radius: 10px !important;
+            position: fixed !important;
+            z-index: 2000 !important;
+          }
+        }
+        .occupancy-box .sensor-row {
           display: flex;
           flex-direction: row;
           gap: 1.2rem;
           flex-wrap: wrap;
           margin-top: 0.5rem;
         }
-        .shelf-occupancy-box .sensor-item {
+        .occupancy-box .sensor-item {
           min-width: 90px;
-        }
-        @media (max-width: 600px) {
-          .shelf-occupancy-box {
-            left: 50% !important;
-            right: auto !important;
-            top: auto !important;
-            bottom: 0.5rem !important;
-            transform: translateX(-50%) !important;
-            max-width: 98% !important;
-            font-size: 0.95rem !important;
-            padding: 0.8rem 0.5rem !important;
-            border-radius: 10px !important;
-          }
         }
       `;
       document.head.appendChild(style);
@@ -1309,158 +1324,6 @@ class ModelViewer {
   }
 }
 
-// Crear el componente embebible
-class ShelfViewer extends ModelViewer {
-  constructor(container, config = {}) {
-    super(container);
-    this.container = container;
-    this.config = config;
-    
-    // Aplicar dimensiones
-    this.container.style.width = config.width || '100%';
-    this.container.style.height = config.height || '100%';
-    
-    // Inicializar Three.js
-    this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    this.container.appendChild(this.renderer.domElement);
-    
-    // Configurar controles
-    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    
-    // Configurar iluminación
-    this.setupLights();
-    
-    // Configurar eventos
-    window.addEventListener('resize', () => this.onWindowResize());
-    
-    // Iniciar animación
-    this.animate();
-  }
-
-  // Sobrescribir el método de creación del occupancy box para que sea relativo al contenedor
-  showShelfOccupancyBox(occupancy1, occupancy2, temp = null, hum = null) {
-    if (!this.isShelfModel) {
-      if (this.occupancyBox) this.occupancyBox.style.display = 'none';
-      return;
-    }
-    if (!this.occupancyBox) {
-      this.occupancyBox = document.createElement('div');
-      this.occupancyBox.className = 'shelf-occupancy-box';
-      this.occupancyBox.style.position = 'absolute';
-      this.occupancyBox.style.top = '1rem';
-      this.occupancyBox.style.right = '1rem';
-      this.occupancyBox.style.background = 'rgba(30,30,30,0.92)';
-      this.occupancyBox.style.color = '#fff';
-      this.occupancyBox.style.padding = '1.2rem 1.5rem';
-      this.occupancyBox.style.borderRadius = '12px';
-      this.occupancyBox.style.fontFamily = 'monospace';
-      this.occupancyBox.style.fontSize = '1rem';
-      this.occupancyBox.style.zIndex = '2000';
-      this.occupancyBox.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
-      this.occupancyBox.style.maxWidth = '90%';
-      this.occupancyBox.style.wordBreak = 'break-word';
-      this.occupancyBox.style.display = 'flex';
-      this.occupancyBox.style.flexDirection = 'column';
-      this.occupancyBox.style.alignItems = 'flex-start';
-      this.occupancyBox.style.gap = '0.5rem';
-      this.container.appendChild(this.occupancyBox);
-
-      // Estilos encapsulados
-      const style = document.createElement('style');
-      style.textContent = `
-        .shelf-occupancy-box .sensor-row {
-          display: flex;
-          flex-direction: row;
-          gap: 1.2rem;
-          flex-wrap: wrap;
-          margin-top: 0.5rem;
-        }
-        .shelf-occupancy-box .sensor-item {
-          min-width: 90px;
-        }
-        @media (max-width: 600px) {
-          .shelf-occupancy-box {
-            left: 50% !important;
-            right: auto !important;
-            top: auto !important;
-            bottom: 0.5rem !important;
-            transform: translateX(-50%) !important;
-            max-width: 98% !important;
-            font-size: 0.95rem !important;
-            padding: 0.8rem 0.5rem !important;
-            border-radius: 10px !important;
-          }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    // Calcular ocupación
-    const totalEstantes = 10;
-    const volumenPorEstante = 0.025; // m³
-    let ocupados = 0;
-    if (occupancy1) ocupados++;
-    if (occupancy2) ocupados++;
-    const metrosUsados = ocupados * volumenPorEstante;
-    const porcentaje = ((metrosUsados / (totalEstantes * volumenPorEstante)) * 100).toFixed(1);
-    let html = '';
-    if (ocupados > 0) {
-      html += `<div><b>Estantes ocupados:</b> ${ocupados}</div>`;
-      html += `<div><b>Metros usados:</b> ${metrosUsados.toFixed(3)} m³</div>`;
-      html += `<div><b>Porcentaje de ocupación:</b> ${porcentaje}%</div>`;
-    }
-    if (temp !== null || hum !== null) {
-      html += `<div class='sensor-row'>
-        <div class='sensor-item'><b>Temp:</b> ${temp !== null ? temp : '--'} °C</div>
-        <div class='sensor-item'><b>Humedad:</b> ${hum !== null ? hum : '--'} %</div>
-      </div>`;
-    }
-    this.occupancyBox.innerHTML = html;
-    this.occupancyBox.style.display = (html) ? 'block' : 'none';
-  }
-}
-
-// Exportar la función para uso en modo embebido
-export function initShelfViewer(containerId, options = {}) {
-    const defaultOptions = {
-        width: '100%',
-        height: '100%',
-        showControls: true,
-        showStats: true,
-        showOccupancyBox: true
-    };
-
-    const config = { ...defaultOptions, ...options };
-    const container = document.getElementById(containerId);
-    
-    if (!container) {
-        console.error(`Container with id "${containerId}" not found`);
-        return null;
-    }
-
-    const viewer = new ShelfViewer(container, config);
-    
-    // Cargar el modelo del estante por defecto si no se especifica otro
-    if (config.models && config.models.length > 0) {
-        viewer.loadModel(config.models[0].path, config.models[0].name);
-    } else {
-        viewer.loadModel('/models/Shelf.obj', 'Estante');
-    }
-
-    return viewer;
-}
-
-// Ejemplo de uso simplificado:
-/*
-<div id="shelf-viewer-container"></div>
-<script>
-  const viewer = initShelfViewer('shelf-viewer-container');
-</script>
-*/
 
 document.addEventListener('DOMContentLoaded', () => {
   const viewer = new ModelViewer('viewer-container');
