@@ -16,6 +16,16 @@ class ModelViewer {
     this.initControls();
     this.setupEventListeners();
     this.loadShelfModel();
+    
+    // Setup message listener for embedded mode
+    window.addEventListener('message', (event) => {
+      // Verify origin if needed
+      // if (event.origin !== "https://your-parent-domain.com") return;
+      
+      if (event.data.type === 'updateSensors') {
+        this.updateShoesState(event.data.sensorData);
+      }
+    });
   }
 
   initScene() {
@@ -271,6 +281,11 @@ class ModelViewer {
   }
 
   fetchInitialSensorState() {
+    // Notify parent window that we're ready
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'viewerReady' }, '*');
+    }
+    
     fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1')
     .then(response => response.json())
     .then(data => {
@@ -294,6 +309,15 @@ class ModelViewer {
         try {
           const msg = JSON.parse(jsonStr);
           if (msg.topic && msg.data) {
+            // Notify parent window of sensor updates
+            if (window.parent !== window) {
+              window.parent.postMessage({
+                type: 'sensorUpdate',
+                topic: msg.topic,
+                data: msg.data
+              }, '*');
+            }
+            
             if (msg.topic.endsWith('proximity1')) {
               this.updateShoesState({
                 proximity1: msg.data.value,
