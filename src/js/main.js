@@ -354,9 +354,25 @@ class ModelViewer {
           this.controls.target.set(1.28, 3.82, 0.12);
           this.addDraggableShoe(4.608);
           let temp = null, hum = null;
-          let lastUpdateTimer = null;
-          const INITIAL_FALLBACK_TIMEOUT = 25000; // 25 segundos
-          let hasCheckedMongo = false;
+
+          // Fetch inicial a MongoDB para estado del shelf
+          (async () => {
+            try {
+              const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
+                mode: 'cors',
+                headers: { 'Accept': 'application/json' }
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const data = await response.json();
+              // Actualiza el estado inicial de los zapatos y la caja de ocupación
+              updateShoesState({
+                proximity1: data.proximity1?.value || 100,
+                proximity2: data.proximity2?.value || 100
+              });
+            } catch (error) {
+              console.error('Error al obtener estado inicial del shelf:', error);
+            }
+          })();
 
           // Configuración de zapatos
           const shoeConfig = [
@@ -414,31 +430,6 @@ class ModelViewer {
             );
           };
 
-          const resetTimer = () => {
-            if (lastUpdateTimer) clearTimeout(lastUpdateTimer);
-            
-            // Solo configurar el timer si no hemos consultado MongoDB aún
-            if (!hasCheckedMongo) {
-              lastUpdateTimer = setTimeout(async () => {
-                try {
-                  const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
-                    mode: 'cors',
-                    headers: { 'Accept': 'application/json' }
-                  });
-                  if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-                  const data = await response.json();
-                  updateShoesState({
-                    proximity1: data.proximity1?.value || 100,
-                    proximity2: data.proximity2?.value || 100
-                  });
-                  hasCheckedMongo = true; // Marcar que ya consultamos MongoDB
-        } catch (error) {
-                  console.error('Error en fallback fetch:', error);
-                }
-              }, INITIAL_FALLBACK_TIMEOUT);
-            }
-          };
-
           // Inicializar zapatos y configurar WebSocket
           initializeShoes().then(() => {
             setupWebSocket();
@@ -450,7 +441,6 @@ class ModelViewer {
                 proximity1: message.value,
                 proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
               });
-              resetTimer();
             });
 
             subscribeSensor('warehouse/unit/1/sensor/proximity2', (message) => {
@@ -459,7 +449,6 @@ class ModelViewer {
                 proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
                 proximity2: message.value
               });
-              resetTimer();
             });
 
             subscribeSensor('warehouse/unit/1/sensor/temperature', (message) => {
@@ -469,7 +458,6 @@ class ModelViewer {
                 proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
                 proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
               });
-              resetTimer();
             });
 
             subscribeSensor('warehouse/unit/1/sensor/humidity', (message) => {
@@ -479,10 +467,7 @@ class ModelViewer {
                 proximity1: this.shoeRojo ? (this.shoeRojo.visible ? 0 : 100) : 100,
                 proximity2: this.shoeAzul ? (this.shoeAzul.visible ? 0 : 100) : 100
               });
-              resetTimer();
             });
-
-            resetTimer();
           });
         } else if (fileName.toLowerCase().includes('silla')) {
           this.camera.position.set(0.16, 2.45, 4.31);
