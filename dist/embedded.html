@@ -22,9 +22,9 @@
 <body>
     <div id="viewer-container"></div>
     <script type="module">
-      import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
-      import { OBJLoader } from 'https://cdn.skypack.dev/three@0.150.1/examples/jsm/loaders/OBJLoader.js';
-      import { OrbitControls } from 'https://cdn.skypack.dev/three@0.150.1/examples/jsm/controls/OrbitControls.js';
+      import * as THREE from 'https://esm.sh/three@0.150.1';
+      import { OBJLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/OBJLoader.js';
+      import { OrbitControls } from 'https://esm.sh/three@0.150.1/examples/jsm/controls/OrbitControls.js';
 
       class EmbeddedViewer {
         constructor(containerId = 'viewer-container') {
@@ -129,7 +129,30 @@
             mesh.position.y = -bbox.min.y * mesh.scale.y + 8.529;
             this.scene.add(mesh);
             this.currentModel = mesh;
+            this.fetchShelfState();
+            this.setupWebSocket();
           });
+        }
+
+        async fetchShelfState() {
+          try {
+            const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
+              mode: 'cors',
+              headers: { 'Accept': 'application/json' }
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            // Aquí puedes usar los datos para mostrar el estado inicial del shelf
+            console.log('Estado inicial del shelf:', data);
+          } catch (error) {
+            console.error('Error al obtener estado inicial del shelf:', error);
+          }
+        }
+
+        setupWebSocket() {
+          // Aquí puedes agregar la lógica de WebSocket para actualizaciones en tiempo real
+          // Por ejemplo, usando socket.io-client o MQTT según tu backend
+          // Este método queda como placeholder para que lo completes según tu stack
         }
 
         animate() {
