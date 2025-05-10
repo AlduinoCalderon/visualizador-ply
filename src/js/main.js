@@ -271,10 +271,7 @@ class ModelViewer {
   }
 
   fetchInitialSensorState() {
-    fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1', {
-      mode: 'cors',
-      headers: { 'Accept': 'application/json' }
-    })
+    fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1')
     .then(response => response.json())
     .then(data => {
       this.updateShoesState({
