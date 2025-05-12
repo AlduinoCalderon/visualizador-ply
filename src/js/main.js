@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import io from 'socket.io-client';
 
 class ModelViewer {
   constructor(containerId = 'viewer-container') {
@@ -11,6 +12,17 @@ class ModelViewer {
     this.occupancyBox = null;
     this.temp = null;
     this.hum = null;
+    this.sensorBuffer = {
+      proximity1: null,
+      proximity2: null,
+      proximity3: null,
+      proximity4: null,
+      proximity5: null,
+      proximity6: null,
+      temperature: null,
+      humidity: null
+    };
+    this.lastUpdateTime = null;
     this.initScene();
     this.initLights();
     this.initControls();
@@ -27,7 +39,7 @@ class ModelViewer {
       }
     });
   }
-
+  
   initScene() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xffffff);
@@ -59,7 +71,7 @@ class ModelViewer {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.container.appendChild(this.renderer.domElement);
   }
-
+  
   initLights() {
     const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
     this.scene.add(ambientLight);
@@ -72,7 +84,7 @@ class ModelViewer {
     backLight.position.set(0, 1, -1);
     this.scene.add(backLight);
   }
-
+  
   initControls() {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -93,7 +105,7 @@ class ModelViewer {
     this.controls.enablePan = true;
     this.controls.panSpeed = 0.5;
   }
-
+  
   setupEventListeners() {
     window.addEventListener('resize', () => {
       this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
@@ -101,23 +113,23 @@ class ModelViewer {
       this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     });
   }
-
+  
   async loadShelfModel() {
     const loader = new OBJLoader();
     try {
-      console.log('Cargando modelo desde:', './models/Shelf.obj');
+      console.log(`[${new Date().toISOString()}] Cargando modelo desde: ./models/Shelf.obj`);
       const mesh = await new Promise((resolve, reject) => {
         loader.load(
           './models/Shelf.obj',
           (mesh) => {
-            console.log('Modelo cargado exitosamente');
+            console.log(`[${new Date().toISOString()}] Modelo cargado exitosamente`);
             resolve(mesh);
           },
           (xhr) => {
-            console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+            console.log(`[${new Date().toISOString()}] ${(xhr.loaded / xhr.total * 100)}% cargado`);
           },
           (error) => {
-            console.error('Error cargando modelo:', error);
+            console.error(`[${new Date().toISOString()}] Error cargando modelo:`, error);
             reject(error);
           }
         );
@@ -130,8 +142,8 @@ class ModelViewer {
       });
 
       // Aplicar el material a todos los meshes
-      mesh.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
+            mesh.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
           // Limpiar materiales antiguos
           if (child.material) {
             if (Array.isArray(child.material)) {
@@ -160,22 +172,33 @@ class ModelViewer {
       mesh.scale.set(0.005, 0.005, 0.005);
       const bbox = new THREE.Box3().setFromObject(mesh);
       mesh.position.y = -bbox.min.y * mesh.scale.y + 8.529;
-      this.scene.add(mesh);
-      this.currentModel = mesh;
-
+          this.scene.add(mesh);
+          this.currentModel = mesh;
+          
       // Inicializar zapatos y sensores
+      console.log(`[${new Date().toISOString()}] Inicializando zapatos...`);
       await this.initializeShoes();
-      this.fetchInitialSensorState();
+      
+      // Primero obtener el estado inicial de MongoDB
+      console.log(`[${new Date().toISOString()}] Consultando estado inicial de sensores en MongoDB...`);
+      await this.fetchInitialSensorState();
+      
+      // Después de obtener el estado inicial, configurar Socket.IO
+      console.log(`[${new Date().toISOString()}] Configurando Socket.IO para actualizaciones en tiempo real...`);
       this.setupWebSocket();
-    } catch (error) {
-      console.error('Error loading shelf model:', error);
+        } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error loading shelf model:`, error);
     }
   }
 
   async initializeShoes() {
     const shoeConfig = [
-      { id: 'shoe_rojo', color: 0xff0000, yPosition: 4.608 },
-      { id: 'shoe_azul', color: 0x0000ff, yPosition: 2.5 }
+      { id: 'shoe_1', color: 0xff0000, yPosition: 7.908, sensorType: 'proximity1' },  // Estante superior
+      { id: 'shoe_2', color: 0x00ff00, yPosition: 6.8, sensorType: 'proximity3' },  // Estante 2
+      { id: 'shoe_3', color: 0x0000ff, yPosition: 5.7, sensorType: 'proximity2' },  // Estante 3
+      { id: 'shoe_4', color: 0xffff00, yPosition: 4.65, sensorType: 'proximity4' },  // Estante 4
+      { id: 'shoe_5', color: 0xff00ff, yPosition: 3.45, sensorType: 'proximity5' },  // Estante 5
+      { id: 'shoe_6', color: 0x00ffff, yPosition: 2.4023, sensorType: 'proximity6' }   // Estante inferior
     ];
 
     for (const config of shoeConfig) {
@@ -194,7 +217,6 @@ class ModelViewer {
           geometry.computeVertexNormals();
           geometry.center();
           
-          // Crear material básico con color específico
           const material = new THREE.MeshBasicMaterial({
             color: config.color,
             side: THREE.DoubleSide
@@ -202,17 +224,18 @@ class ModelViewer {
           
           const shoe = new THREE.Mesh(geometry, material);
           shoe.name = config.id;
+          shoe.userData.sensorType = config.sensorType; // Guardar el tipo de sensor
           shoe.scale.set(0.0237, 0.0237, 0.0237);
           shoe.position.set(0, config.yPosition, 0);
           shoe.visible = false;
           this.scene.add(shoe);
           this.shoes[config.id] = shoe;
           resolve(shoe);
-        },
-        (xhr) => {
+      },
+      (xhr) => {
           console.log((xhr.loaded / xhr.total * 100) + '% cargado');
-        },
-        (error) => {
+      },
+      (error) => {
           console.error('Error cargando zapato:', error);
         }
       );
@@ -220,21 +243,31 @@ class ModelViewer {
   }
 
   updateShoesState(sensorData) {
-    if (this.shoes['shoe_rojo']) {
-      this.shoes['shoe_rojo'].visible = sensorData.proximity1 < 39;
-    }
-    if (this.shoes['shoe_azul']) {
-      this.shoes['shoe_azul'].visible = sensorData.proximity2 < 39;
-    }
+    // Actualizar cada zapato según su sensor correspondiente
+    Object.entries(this.shoes).forEach(([shoeId, shoe]) => {
+      const sensorType = shoe.userData.sensorType;
+      const oldVisible = shoe.visible;
+      if (sensorData[sensorType] !== undefined) {
+        shoe.visible = sensorData[sensorType] < 39;
+        if (oldVisible !== shoe.visible) {
+          console.log(`[${new Date().toISOString()}] 👞 Zapato ${shoeId} (${sensorType}) ${shoe.visible ? 'visible' : 'oculto'} - Valor: ${sensorData[sensorType]}`);
+        }
+      }
+    });
+
+    // Actualizar el box de ocupación
+    const occupiedShelves = Object.entries(this.shoes)
+      .filter(([_, shoe]) => shoe.visible)
+      .length;
+
     this.showShelfOccupancyBox(
-      this.shoes['shoe_rojo'] && this.shoes['shoe_rojo'].visible,
-      this.shoes['shoe_azul'] && this.shoes['shoe_azul'].visible,
+      occupiedShelves,
       this.temp,
       this.hum
     );
   }
 
-  showShelfOccupancyBox(occupancy1, occupancy2, temp = null, hum = null) {
+  showShelfOccupancyBox(occupiedShelves, temp = null, hum = null) {
     if (!this.occupancyBox) {
       this.occupancyBox = document.createElement('div');
       this.occupancyBox.className = 'occupancy-box';
@@ -257,16 +290,15 @@ class ModelViewer {
       this.occupancyBox.style.gap = '0.5rem';
       (this.container || document.body).appendChild(this.occupancyBox);
     }
-    const totalEstantes = 10;
+
+    const totalEstantes = 6;
     const volumenPorEstante = 0.025;
-    let ocupados = 0;
-    if (occupancy1) ocupados++;
-    if (occupancy2) ocupados++;
-    const metrosUsados = ocupados * volumenPorEstante;
+    const metrosUsados = occupiedShelves * volumenPorEstante;
     const porcentaje = ((metrosUsados / (totalEstantes * volumenPorEstante)) * 100).toFixed(1);
+    
     let html = '';
-    if (ocupados > 0) {
-      html += `<div><b>Estantes ocupados:</b> ${ocupados}</div>`;
+    if (occupiedShelves > 0) {
+      html += `<div><b>Estantes ocupados:</b> ${occupiedShelves}</div>`;
       html += `<div><b>Metros usados:</b> ${metrosUsados.toFixed(3)} m³</div>`;
       html += `<div><b>Porcentaje de ocupación:</b> ${porcentaje}%</div>`;
     }
@@ -280,78 +312,137 @@ class ModelViewer {
     this.occupancyBox.style.display = (html) ? 'block' : 'none';
   }
 
-  fetchInitialSensorState() {
-    // Notify parent window that we're ready
+  async fetchInitialSensorState() {
     if (window.parent !== window) {
       window.parent.postMessage({ type: 'viewerReady' }, '*');
     }
     
-    fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1')
-    .then(response => response.json())
-    .then(data => {
+    try {
+      console.log(`[${new Date().toISOString()}] Realizando fetch a MongoDB...`);
+      const response = await fetch('https://coldstoragehub.onrender.com/api/mongodb/readings/proximity?unitId=1');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log(`[${new Date().toISOString()}] Datos recibidos de MongoDB:`, data);
+      
+      const sensorData = {
+        proximity1: data.proximity1?.value,
+        proximity2: data.proximity2?.value,
+        proximity3: data.proximity3?.value,
+        proximity4: data.proximity4?.value,
+        proximity5: data.proximity5?.value,
+        proximity6: data.proximity6?.value
+      };
+      
+      console.log(`[${new Date().toISOString()}] Estado inicial de sensores:`, sensorData);
+      this.updateShoesState(sensorData);
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error al obtener estado inicial de sensores:`, error);
       this.updateShoesState({
-        proximity1: data.proximity1?.value || 100,
-        proximity2: data.proximity2?.value || 100
+        proximity1: 100,
+        proximity2: 100,
+        proximity3: 100,
+        proximity4: 100,
+        proximity5: 100,
+        proximity6: 100
       });
-    })
-    .catch(() => {
-      this.updateShoesState({ proximity1: 100, proximity2: 100 });
-    });
+    }
   }
 
   setupWebSocket() {
-    const ws = new WebSocket('wss://coldstoragehub.onrender.com/socket.io/?EIO=4&transport=websocket');
-    let buffer = '';
-    ws.onmessage = (event) => {
-      buffer += event.data;
-      if (buffer.includes('{') && buffer.includes('}')) {
-        const jsonStr = buffer.substring(buffer.indexOf('{'), buffer.lastIndexOf('}') + 1);
-        try {
-          const msg = JSON.parse(jsonStr);
-          if (msg.topic && msg.data) {
-            // Notify parent window of sensor updates
-            if (window.parent !== window) {
-              window.parent.postMessage({
-                type: 'sensorUpdate',
-                topic: msg.topic,
-                data: msg.data
-              }, '*');
-            }
-            
-            if (msg.topic.endsWith('proximity1')) {
-              this.updateShoesState({
-                proximity1: msg.data.value,
-                proximity2: this.shoes['shoe_azul'] && this.shoes['shoe_azul'].visible ? 0 : 100
-              });
-            } else if (msg.topic.endsWith('proximity2')) {
-              this.updateShoesState({
-                proximity1: this.shoes['shoe_rojo'] && this.shoes['shoe_rojo'].visible ? 0 : 100,
-                proximity2: msg.data.value
-              });
-            } else if (msg.topic.endsWith('temperature')) {
-              this.temp = msg.data.value;
-              this.showShelfOccupancyBox(
-                this.shoes['shoe_rojo'] && this.shoes['shoe_rojo'].visible,
-                this.shoes['shoe_azul'] && this.shoes['shoe_azul'].visible,
-                this.temp,
-                this.hum
-              );
-            } else if (msg.topic.endsWith('humidity')) {
-              this.hum = msg.data.value;
-              this.showShelfOccupancyBox(
-                this.shoes['shoe_rojo'] && this.shoes['shoe_rojo'].visible,
-                this.shoes['shoe_azul'] && this.shoes['shoe_azul'].visible,
-                this.temp,
-                this.hum
-              );
-            }
-          }
-        } catch (e) { /* ignorar parseos fallidos */ }
-        buffer = '';
-      }
-    };
-  }
+    console.log(`[${new Date().toISOString()}] Iniciando conexión Socket.IO...`);
+    
+    // Cargar Socket.IO dinámicamente
+    const script = document.createElement('script');
+    script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js';
+    script.onload = () => {
+      this.socket = io('https://coldstoragehub.onrender.com');
+      
+      this.socket.on('connect', () => {
+        console.log(`[${new Date().toISOString()}] Conexión Socket.IO establecida`);
+      });
 
+      this.socket.on('mqtt-message', (data) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] 📡 Mensaje recibido:`, {
+          topic: data.topic,
+          value: data.message.value,
+          timestamp: data.message.timestamp
+        });
+
+        if (window.parent !== window) {
+          window.parent.postMessage({
+            type: 'sensorUpdate',
+            topic: data.topic,
+            data: data.message
+          }, '*');
+        }
+
+        // Actualizar el buffer de sensores
+        const sensorType = data.topic.split('/').pop();
+        this.sensorBuffer[sensorType] = {
+          value: data.message.value,
+          timestamp: data.message.timestamp
+        };
+
+        // Verificar si tenemos un conjunto completo de lecturas
+        const now = Date.now();
+        const hasAllReadings = Object.values(this.sensorBuffer).every(reading => reading !== null);
+        const timeSinceLastUpdate = this.lastUpdateTime ? now - this.lastUpdateTime : Infinity;
+        
+        if (hasAllReadings && timeSinceLastUpdate >= 1000) { // Actualizar cada segundo como máximo
+          console.log(`[${timestamp}] 📊 Conjunto completo de lecturas recibido:`, this.sensorBuffer);
+          
+          // Crear objeto de estado con los valores actuales
+          const currentState = {
+            proximity1: this.sensorBuffer.proximity1.value,
+            proximity2: this.sensorBuffer.proximity2.value,
+            proximity3: this.sensorBuffer.proximity3.value,
+            proximity4: this.sensorBuffer.proximity4.value,
+            proximity5: this.sensorBuffer.proximity5.value,
+            proximity6: this.sensorBuffer.proximity6.value
+          };
+
+          // Actualizar temperatura y humedad
+          this.temp = this.sensorBuffer.temperature.value;
+          this.hum = this.sensorBuffer.humidity.value;
+
+          // Log del estado actual de los zapatos
+          console.log(`[${timestamp}] 👞 Estado actual de zapatos:`, 
+            Object.entries(this.shoes).map(([id, shoe]) => ({
+              id,
+              sensorType: shoe.userData.sensorType,
+              visible: shoe.visible,
+              value: currentState[shoe.userData.sensorType]
+            }))
+          );
+
+          // Actualizar estado de los zapatos
+          this.updateShoesState(currentState);
+          
+          // Actualizar el box de ocupación
+          this.showShelfOccupancyBox(
+            Object.values(this.shoes).filter(shoe => shoe.visible).length,
+            this.temp,
+            this.hum
+          );
+
+          this.lastUpdateTime = now;
+        }
+      });
+
+      this.socket.on('disconnect', () => {
+        console.log(`[${new Date().toISOString()}] Conexión Socket.IO cerrada`);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error(`[${new Date().toISOString()}] Error de conexión Socket.IO:`, error);
+      });
+    };
+    document.head.appendChild(script);
+  }
+  
   animate() {
     this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
     this.controls.update();
@@ -363,4 +454,4 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewer = new ModelViewer('viewer-container');
   viewer.animate();
   window.modelViewer = viewer;
-}); 
+});
